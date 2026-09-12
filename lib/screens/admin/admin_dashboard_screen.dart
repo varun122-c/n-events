@@ -257,20 +257,20 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildQuickActionCard(
                     context,
-                    label: 'Student Messages',
-                    icon: Icons.forum_outlined,
-                    color: Colors.teal.shade700,
-                    onTap: () => context.push('/admin/chats'),
+                    label: 'Staff Management',
+                    icon: Icons.manage_accounts_rounded,
+                    color: const Color(0xFF7C3AED),
+                    onTap: () => context.push('/admin/staff'),
                   ),
                 ),
                 SizedBox(width: 12),
                 Expanded(
                   child: _buildQuickActionCard(
                     context,
-                    label: 'Staff Management',
-                    icon: Icons.manage_accounts_rounded,
-                    color: const Color(0xFF7C3AED),
-                    onTap: () => context.push('/admin/staff'),
+                    label: 'User Directory',
+                    icon: Icons.people_outline_rounded,
+                    color: const Color(0xFF2563EB),
+                    onTap: () => context.push('/admin/users'),
                   ),
                 ),
               ],

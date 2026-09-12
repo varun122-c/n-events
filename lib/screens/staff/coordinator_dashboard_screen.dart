@@ -214,41 +214,12 @@ class _CoordinatorDashboardScreenState extends State<CoordinatorDashboardScreen>
             tooltip: 'Verify Ticket / Camera Scanner',
             onPressed: () => _showScanVerifyDialog(context, stateProvider, assignedEvents),
           ),
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chat_bubble_rounded, color: Color(0xFF2563EB)),
-                tooltip: 'Student Inquiries & Chat',
-                onPressed: () => context.push('/staff/coordinator/chats'),
-              ),
-              if (unreadChatCount > 0)
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    child: Text(
-                      '$unreadChatCount',
-                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert_rounded, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             onSelected: (v) {
               if (v == 'export') {
                 _exportCSV(context, 'All Assigned Events', assignedRegs);
-              } else if (v == 'chat') {
-                context.push('/staff/coordinator/chats');
               } else if (v == 'logout') {
                 authProvider.logout();
                 context.go('/auth');
@@ -262,16 +233,6 @@ class _CoordinatorDashboardScreenState extends State<CoordinatorDashboardScreen>
                     Icon(Icons.table_chart_rounded, color: Color(0xFF10B981), size: 18),
                     SizedBox(width: 8),
                     Text('Export Excel / CSV'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'chat',
-                child: Row(
-                  children: [
-                    Icon(Icons.chat_bubble_rounded, color: Color(0xFF2563EB), size: 18),
-                    SizedBox(width: 8),
-                    Text('Student Inquiries & Chat'),
                   ],
                 ),
               ),
@@ -391,85 +352,6 @@ class _CoordinatorDashboardScreenState extends State<CoordinatorDashboardScreen>
                     child: const Text('Open Verifier', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
                   ),
                 ],
-              ),
-            ),
-          ),
-
-          // Student Inquiries & Chat Banner
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: InkWell(
-              onTap: () => context.push('/staff/coordinator/chats'),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF2563EB).withValues(alpha: 0.3),
-                    width: 1.2,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.chat_rounded, color: Color(0xFF2563EB), size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                'Student Inquiries & Live Chat',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w900,
-                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                ),
-                              ),
-                              if (unreadChatCount > 0) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFEF4444),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    '$unreadChatCount NEW',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Respond directly to student questions and event help requests',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF2563EB)),
-                  ],
-                ),
               ),
             ),
           ),

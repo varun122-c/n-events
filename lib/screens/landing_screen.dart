@@ -510,9 +510,9 @@ class _LandingScreenState extends State<LandingScreen>
                               ),
                               _buildFeatureCard(
                                 context,
-                                title: 'Coordinator Live Chat',
-                                subtitle: 'Direct messaging between students & staff',
-                                icon: Icons.forum_rounded,
+                                title: 'Campus Notifications',
+                                subtitle: 'Live broadcast alerts & event updates',
+                                icon: Icons.notifications_active_rounded,
                                 color: const Color(0xFF7C3AED),
                                 isDark: isDark,
                               ),

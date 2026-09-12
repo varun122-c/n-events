@@ -1158,20 +1158,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                   ),
               ],
             ),
-      floatingActionButton: isAlreadyRegistered
-          ? Padding(
-              padding: const EdgeInsets.only(bottom: 70), // Avoid overlap with bottom fixed bar
-              child: FloatingActionButton.extended(
-                onPressed: () {
-                  context.push('/student/chat/${event.id}/${authProvider.studentRoll}');
-                },
-                backgroundColor: isDark ? const Color(0xFF2563EB) : const Color(0xFF1E3C72),
-                foregroundColor: Colors.white,
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Chat Coordinator', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
-            )
-          : null,
     );
   }
 

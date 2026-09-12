@@ -10,13 +10,11 @@ import '../screens/auth/auth_screen.dart';
 import '../screens/auth/oauth_callback_screen.dart';
 import '../screens/student/student_main_navigation.dart';
 import '../screens/student/event_details_screen.dart';
-import '../screens/student/student_coordinator_chat_screen.dart';
 import '../screens/student/student_tickets_screen.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
 import '../screens/admin/admin_event_form_screen.dart';
 import '../screens/admin/admin_participants_screen.dart';
 import '../screens/admin/admin_banner_customizer_screen.dart';
-import '../screens/admin/admin_chats_screen.dart';
 import '../screens/admin/admin_staff_management_screen.dart';
 import '../screens/admin/admin_user_directory_screen.dart';
 import '../screens/staff/organizer_dashboard_screen.dart';
@@ -149,18 +147,6 @@ class AppRouter {
           );
         },
       ),
-      GoRoute(
-        path: '/student/chat/:eventId/:studentRoll',
-        pageBuilder: (context, state) {
-          final eventId = state.pathParameters['eventId']!;
-          final studentRoll = state.pathParameters['studentRoll']!;
-          return buildAnimatedPage(
-            context: context,
-            state: state,
-            child: StudentCoordinatorChatScreen(eventId: eventId, studentRoll: studentRoll),
-          );
-        },
-      ),
 
       // ─── Admin Routes ─────────────────────────────────────────────────────
       GoRoute(
@@ -202,14 +188,6 @@ class AppRouter {
         ),
       ),
       GoRoute(
-        path: '/admin/chats',
-        pageBuilder: (context, state) => buildAnimatedPage(
-          context: context,
-          state: state,
-          child: const AdminChatsScreen(),
-        ),
-      ),
-      GoRoute(
         path: '/admin/staff',
         pageBuilder: (context, state) => buildAnimatedPage(
           context: context,
@@ -225,7 +203,6 @@ class AppRouter {
           child: const AdminUserDirectoryScreen(),
         ),
       ),
-
       // ─── Staff Routes ─────────────────────────────────────────────────────
       GoRoute(
         path: '/staff/organizer',
@@ -241,14 +218,6 @@ class AppRouter {
           context: context,
           state: state,
           child: const CoordinatorDashboardScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/staff/coordinator/chats',
-        pageBuilder: (context, state) => buildAnimatedPage(
-          context: context,
-          state: state,
-          child: const AdminChatsScreen(),
         ),
       ),
       GoRoute(
