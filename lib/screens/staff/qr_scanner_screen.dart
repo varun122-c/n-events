@@ -82,7 +82,13 @@ class _QrScannerScreenState extends State<QrScannerScreen>
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final stateProvider = Provider.of<AppStateProvider>(context);
-    final assignedEvents = stateProvider.getAssignedEvents(authProvider.assignedEventIds);
+    final assignedEvents = authProvider.role == 'admin'
+        ? stateProvider.events
+        : stateProvider.getAssignedEvents(authProvider.assignedEventIds);
+
+    if (_selectedEvent == null && assignedEvents.isNotEmpty) {
+      _selectedEvent = assignedEvents.first;
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,

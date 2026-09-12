@@ -284,10 +284,10 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildQuickActionCard(
                     context,
-                    label: 'All Users & Logins',
-                    icon: Icons.people_alt_rounded,
-                    color: const Color(0xFF0284C7),
-                    onTap: () => context.push('/admin/users'),
+                    label: 'Verify Camera QR',
+                    icon: Icons.qr_code_scanner_rounded,
+                    color: const Color(0xFF10B981),
+                    onTap: () => context.push('/staff/scanner'),
                   ),
                 ),
                 const SizedBox(width: 12),

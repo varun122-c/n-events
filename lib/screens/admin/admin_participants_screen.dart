@@ -359,8 +359,13 @@ class _AdminParticipantsScreenState extends State<AdminParticipantsScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.camera_alt_rounded, color: Color(0xFF10B981)),
+            tooltip: 'Live Camera QR Scanner',
+            onPressed: () => context.push('/staff/scanner'),
+          ),
+          IconButton(
             icon: const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF2563EB)),
-            tooltip: 'Verify Student QR Pass',
+            tooltip: 'Manual Code Verification',
             onPressed: () => _showQrVerificationModal(context, eventRegs, stateProvider),
           ),
           IconButton(
