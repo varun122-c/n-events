@@ -1,0 +1,99 @@
+class Registration {
+  final String id;
+  final String eventId;
+  final String fullName;
+  final String rollNumber;
+  final String department;
+  final String college;
+  final String yearOfStudy;
+  final String phoneNumber;
+  final DateTime registrationDate;
+  final String status; // 'Registered', 'Checked In', 'Attended', 'Cancelled'
+  final String? verifiedBy; // Name of coordinator who verified entry
+  final DateTime? verifiedAt; // Timestamp when verified
+  final bool isCertificatePublished; // True if admin published digital certificate
+
+  Registration({
+    required this.id,
+    required this.eventId,
+    required this.fullName,
+    required this.rollNumber,
+    required this.department,
+    this.college = 'Annamacharya Institute of Technology and Sciences, Tirupati (AITS TPT)',
+    required this.yearOfStudy,
+    required this.phoneNumber,
+    required this.registrationDate,
+    this.status = 'Registered',
+    this.verifiedBy,
+    this.verifiedAt,
+    this.isCertificatePublished = false,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'eventId': eventId,
+      'fullName': fullName,
+      'rollNumber': rollNumber,
+      'department': department,
+      'college': college,
+      'yearOfStudy': yearOfStudy,
+      'phoneNumber': phoneNumber,
+      'registrationDate': registrationDate.toIso8601String(),
+      'status': status,
+      'verifiedBy': verifiedBy,
+      'verifiedAt': verifiedAt?.toIso8601String(),
+      'isCertificatePublished': isCertificatePublished,
+    };
+  }
+
+  factory Registration.fromJson(Map<String, dynamic> json) {
+    return Registration(
+      id: json['id'] as String,
+      eventId: json['eventId'] as String,
+      fullName: json['fullName'] as String,
+      rollNumber: json['rollNumber'] as String,
+      department: json['department'] as String? ?? 'Computer Science and Engineering (CSE)',
+      college: json['college'] as String? ?? 'Annamacharya Institute of Technology and Sciences, Tirupati (AITS TPT)',
+      yearOfStudy: json['yearOfStudy'] as String,
+      phoneNumber: json['phoneNumber'] as String,
+      registrationDate: DateTime.parse(json['registrationDate'] as String),
+      status: json['status'] as String? ?? 'Registered',
+      verifiedBy: json['verifiedBy'] as String?,
+      verifiedAt: json['verifiedAt'] != null ? DateTime.tryParse(json['verifiedAt'] as String) : null,
+      isCertificatePublished: json['isCertificatePublished'] as bool? ?? false,
+    );
+  }
+
+  Registration copyWith({
+    String? id,
+    String? eventId,
+    String? fullName,
+    String? rollNumber,
+    String? department,
+    String? college,
+    String? yearOfStudy,
+    String? phoneNumber,
+    DateTime? registrationDate,
+    String? status,
+    String? verifiedBy,
+    DateTime? verifiedAt,
+    bool? isCertificatePublished,
+  }) {
+    return Registration(
+      id: id ?? this.id,
+      eventId: eventId ?? this.eventId,
+      fullName: fullName ?? this.fullName,
+      rollNumber: rollNumber ?? this.rollNumber,
+      department: department ?? this.department,
+      college: college ?? this.college,
+      yearOfStudy: yearOfStudy ?? this.yearOfStudy,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      registrationDate: registrationDate ?? this.registrationDate,
+      status: status ?? this.status,
+      verifiedBy: verifiedBy ?? this.verifiedBy,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
+      isCertificatePublished: isCertificatePublished ?? this.isCertificatePublished,
+    );
+  }
+}
