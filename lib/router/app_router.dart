@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/animated_page_route.dart';
 import '../screens/splash_screen.dart';
+import '../screens/landing_screen.dart';
 import '../screens/auth/auth_screen.dart';
 import '../screens/auth/oauth_callback_screen.dart';
 import '../screens/student/student_main_navigation.dart';
@@ -30,11 +31,12 @@ class AppRouter {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       final isSplash = state.uri.path == '/splash';
+      final isLanding = state.uri.path == '/landing';
       final isAuth = state.uri.path == '/auth' || state.uri.path == '/role-selection';
       final isCallback = state.uri.path == '/login-callback';
 
-      // Don't interrupt splash or OAuth callback during initialization
-      if (isSplash || isCallback) return null;
+      // Don't interrupt splash, landing, or OAuth callback
+      if (isSplash || isLanding || isCallback) return null;
 
       // If user is not logged in and trying to access protected routes, redirect to /auth
       if (!authProvider.isLoggedIn && !isAuth) {
@@ -80,6 +82,14 @@ class AppRouter {
           context: context,
           state: state,
           child: const SplashScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/landing',
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const LandingScreen(),
         ),
       ),
       GoRoute(
