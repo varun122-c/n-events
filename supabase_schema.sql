@@ -275,8 +275,26 @@ drop policy if exists "Authenticated users can send messages" on public.chat_mes
 create policy "Authenticated users can send messages" on public.chat_messages for insert with check (auth.uid() is not null);
 
 -- ─── ENABLE REALTIME ─────────────────────────────────────────
--- Run these to enable live updates:
-alter publication supabase_realtime add table public.events;
-alter publication supabase_realtime add table public.registrations;
-alter publication supabase_realtime add table public.notifications;
-alter publication supabase_realtime add table public.chat_messages;
+-- Safe Realtime table registration:
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.events;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.registrations;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.notifications;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.chat_messages;
+  exception when others then null;
+  end;
+end $$;
