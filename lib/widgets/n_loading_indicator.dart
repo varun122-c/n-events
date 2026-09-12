@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// Reusable animated glowing Ñ brand loading indicator.
+/// Pure animated glowing Ñ brand emblem loading indicator.
 class NLoadingIndicator extends StatefulWidget {
   final double size;
-  final String? message;
 
   const NLoadingIndicator({
     super.key,
-    this.size = 80,
-    this.message,
+    this.size = 84,
   });
 
   @override
@@ -48,89 +46,72 @@ class _NLoadingIndicatorState extends State<NLoadingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final badgeSize = widget.size * 0.72;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: widget.size,
-          height: widget.size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Outer spinning gradient arc ring
-              RotationTransition(
-                turns: _spinController,
-                child: SizedBox(
-                  width: widget.size,
-                  height: widget.size,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3.2,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF818CF8),
-                    ),
-                    backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.15),
+    return Center(
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Outer spinning gradient arc ring
+            RotationTransition(
+              turns: _spinController,
+              child: SizedBox(
+                width: widget.size,
+                height: widget.size,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3.5,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF818CF8),
                   ),
+                  backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.15),
                 ),
               ),
+            ),
 
-              // Center glowing Ñ emblem badge
-              ScaleTransition(
-                scale: _pulseAnimation,
-                child: Container(
-                  width: badgeSize,
-                  height: badgeSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF4F46E5),
-                        Color(0xFF7C3AED),
-                        Color(0xFFC084FC),
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.45),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                      ),
+            // Center glowing Ñ emblem badge
+            ScaleTransition(
+              scale: _pulseAnimation,
+              child: Container(
+                width: badgeSize,
+                height: badgeSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF4F46E5),
+                      Color(0xFF7C3AED),
+                      Color(0xFFC084FC),
                     ],
                   ),
-                  child: const Center(
-                    child: Text(
-                      'Ñ',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        fontFamily: 'Roboto',
-                      ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.5),
+                      blurRadius: 24,
+                      spreadRadius: 3,
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text(
+                    'Ñ',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      fontFamily: 'Roboto',
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-        if (widget.message != null) ...[
-          const SizedBox(height: 16),
-          Text(
-            widget.message!,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-              letterSpacing: 1.2,
             ),
-          ),
-        ],
-      ],
+          ],
+        ),
+      ),
     );
   }
 }

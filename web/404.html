@@ -30,42 +30,40 @@
       overflow: hidden;
     }
     .loading-container {
-      text-align: center;
       display: flex;
-      flex-direction: column;
+      justify-content: center;
       align-items: center;
     }
     .logo-wrapper {
       position: relative;
-      width: 90px;
-      height: 90px;
+      width: 100px;
+      height: 100px;
       display: flex;
       justify-content: center;
       align-items: center;
-      margin-bottom: 24px;
     }
     .spinner-ring {
       position: absolute;
-      width: 86px;
-      height: 86px;
-      border: 3px solid rgba(129, 140, 248, 0.15);
-      border-top: 3px solid #818CF8;
-      border-right: 3px solid #C084FC;
+      width: 96px;
+      height: 96px;
+      border: 3.5px solid rgba(129, 140, 248, 0.15);
+      border-top: 3.5px solid #818CF8;
+      border-right: 3.5px solid #C084FC;
       border-radius: 50%;
       animation: spin 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
     }
     .n-badge {
-      width: 64px;
-      height: 64px;
+      width: 72px;
+      height: 72px;
       border-radius: 50%;
       background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #C084FC 100%);
       display: flex;
       justify-content: center;
       align-items: center;
-      font-size: 36px;
+      font-size: 40px;
       font-weight: 900;
       color: #FFFFFF;
-      box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+      box-shadow: 0 0 35px rgba(99, 102, 241, 0.6);
       animation: pulse 1.8s ease-in-out infinite;
       user-select: none;
     }
@@ -74,22 +72,8 @@
       100% { transform: rotate(360deg); }
     }
     @keyframes pulse {
-      0%, 100% { transform: scale(0.96); box-shadow: 0 0 25px rgba(99, 102, 241, 0.4); }
-      50% { transform: scale(1.06); box-shadow: 0 0 45px rgba(168, 85, 247, 0.7); }
-    }
-    .loading-title {
-      font-size: 22px;
-      font-weight: 900;
-      letter-spacing: 4px;
-      background: linear-gradient(90deg, #FFFFFF, #818CF8, #C084FC);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .loading-sub {
-      margin-top: 6px;
-      font-size: 12px;
-      letter-spacing: 1.5px;
-      color: #94A3B8;
+      0%, 100% { transform: scale(0.95); box-shadow: 0 0 30px rgba(99, 102, 241, 0.5); }
+      50% { transform: scale(1.08); box-shadow: 0 0 50px rgba(168, 85, 247, 0.8); }
     }
   </style>
 </head>
@@ -99,8 +83,6 @@
       <div class="spinner-ring"></div>
       <div class="n-badge">Ñ</div>
     </div>
-    <div class="loading-title">N-EVENTS</div>
-    <div class="loading-sub">CAMPUS PORTAL</div>
   </div>
   <script src="flutter_bootstrap.js" async></script>
 </body>
