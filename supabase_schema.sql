@@ -39,9 +39,17 @@ create trigger profiles_updated_at
   for each row execute procedure public.handle_updated_at();
 
 alter table public.profiles enable row level security;
+
+drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile" on public.profiles for select using (auth.uid() = id);
+
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles for update using (auth.uid() = id);
+
+drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile" on public.profiles for insert with check (auth.uid() = id);
+
+drop policy if exists "Admins can view all profiles" on public.profiles;
 create policy "Admins can view all profiles" on public.profiles for select using (
   exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
 );
@@ -105,13 +113,21 @@ drop trigger if exists events_updated_at on public.events;
 create trigger events_updated_at before update on public.events for each row execute procedure public.handle_updated_at();
 
 alter table public.events enable row level security;
+
+drop policy if exists "Anyone can view events" on public.events;
 create policy "Anyone can view events" on public.events for select using (true);
+
+drop policy if exists "Admins can insert events" on public.events;
 create policy "Admins can insert events" on public.events for insert with check (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
+
+drop policy if exists "Admins can update events" on public.events;
 create policy "Admins can update events" on public.events for update using (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
+
+drop policy if exists "Admins can delete events" on public.events;
 create policy "Admins can delete events" on public.events for delete using (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
@@ -141,11 +157,19 @@ create index if not exists registrations_user_id_idx  on public.registrations(us
 create index if not exists registrations_roll_idx     on public.registrations(roll_number);
 
 alter table public.registrations enable row level security;
+
+drop policy if exists "Users can view own registrations" on public.registrations;
 create policy "Users can view own registrations" on public.registrations for select using (user_id = auth.uid());
+
+drop policy if exists "Admins and staff can view all registrations" on public.registrations;
 create policy "Admins and staff can view all registrations" on public.registrations for select using (
   exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or sub_role != ''))
 );
+
+drop policy if exists "Authenticated users can register" on public.registrations;
 create policy "Authenticated users can register" on public.registrations for insert with check (auth.uid() is not null);
+
+drop policy if exists "Admins and staff can update status" on public.registrations;
 create policy "Admins and staff can update status" on public.registrations for update using (
   exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or sub_role != ''))
 );
@@ -165,7 +189,11 @@ drop trigger if exists banners_updated_at on public.banners;
 create trigger banners_updated_at before update on public.banners for each row execute procedure public.handle_updated_at();
 
 alter table public.banners enable row level security;
+
+drop policy if exists "Anyone can view banners" on public.banners;
 create policy "Anyone can view banners" on public.banners for select using (true);
+
+drop policy if exists "Admins can manage banners" on public.banners;
 create policy "Admins can manage banners" on public.banners for all using (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
@@ -187,7 +215,11 @@ create table if not exists public.staff_assignments (
 );
 
 alter table public.staff_assignments enable row level security;
+
+drop policy if exists "Staff can view own assignment" on public.staff_assignments;
 create policy "Staff can view own assignment" on public.staff_assignments for select using (user_id = auth.uid());
+
+drop policy if exists "Admins can manage all staff assignments" on public.staff_assignments;
 create policy "Admins can manage all staff assignments" on public.staff_assignments for all using (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
@@ -206,9 +238,17 @@ create table if not exists public.notifications (
 create index if not exists notifications_user_id_idx on public.notifications(user_id);
 
 alter table public.notifications enable row level security;
+
+drop policy if exists "Users can view own and broadcast notifications" on public.notifications;
 create policy "Users can view own and broadcast notifications" on public.notifications for select using (user_id = auth.uid() or user_id is null);
+
+drop policy if exists "Users can mark own notifications read" on public.notifications;
 create policy "Users can mark own notifications read" on public.notifications for update using (user_id = auth.uid() or user_id is null);
+
+drop policy if exists "Authenticated users can insert notifications" on public.notifications;
 create policy "Authenticated users can insert notifications" on public.notifications for insert with check (auth.uid() is not null);
+
+drop policy if exists "Admins can delete notifications" on public.notifications;
 create policy "Admins can delete notifications" on public.notifications for delete using (
   exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
@@ -227,7 +267,11 @@ create table if not exists public.chat_messages (
 create index if not exists chat_messages_event_roll_idx on public.chat_messages(event_id, student_roll);
 
 alter table public.chat_messages enable row level security;
+
+drop policy if exists "Authenticated users can view chat messages" on public.chat_messages;
 create policy "Authenticated users can view chat messages" on public.chat_messages for select using (auth.uid() is not null);
+
+drop policy if exists "Authenticated users can send messages" on public.chat_messages;
 create policy "Authenticated users can send messages" on public.chat_messages for insert with check (auth.uid() is not null);
 
 -- ─── ENABLE REALTIME ─────────────────────────────────────────
