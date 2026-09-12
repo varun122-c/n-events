@@ -684,12 +684,15 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     final formattedDate = DateFormat('EEEE, MMMM d, yyyy').format(event.dateTime);
     final formattedTime = DateFormat('h:mm a').format(event.dateTime);
 
-    // Check if the current user is already registered for this event
+    // Check if the current user is already registered for this event across devices
+    final currentUserId = authProvider.currentUser?.id;
+    final currentRoll = authProvider.studentRoll;
+
     final isAlreadyRegistered = stateProvider.registrations.any(
       (r) => r.eventId == event.id && 
-          authProvider.studentRoll.isNotEmpty && 
-          r.rollNumber.toLowerCase() == authProvider.studentRoll.toLowerCase() &&
-          r.status != 'Cancelled',
+          r.status != 'Cancelled' &&
+          ((currentUserId != null && currentUserId.isNotEmpty && r.userId == currentUserId) ||
+           (currentRoll.isNotEmpty && r.rollNumber.toLowerCase() == currentRoll.toLowerCase())),
     );
 
     return Scaffold(

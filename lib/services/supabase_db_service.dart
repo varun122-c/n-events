@@ -246,6 +246,10 @@ class SupabaseDbService {
     }
   }
 
+  static bool _isValidUuid(String str) {
+    return RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(str);
+  }
+
   /// Insert a new registration. Returns true on success.
   static Future<bool> insertRegistration(
     Registration reg, {
@@ -253,10 +257,15 @@ class SupabaseDbService {
   }) async {
     if (!_isReady) return false;
     try {
+      final rawUser = userId ?? reg.userId ?? _client!.auth.currentUser?.id;
+      final effectiveUserId = (rawUser != null && rawUser.isNotEmpty && _isValidUuid(rawUser))
+          ? rawUser
+          : _client!.auth.currentUser?.id;
+
       await _client!.from('registrations').insert({
         'id': reg.id,
         'event_id': reg.eventId,
-        'user_id': userId,
+        'user_id': effectiveUserId,
         'full_name': reg.fullName,
         'roll_number': reg.rollNumber,
         'department': reg.department,
@@ -313,6 +322,7 @@ class SupabaseDbService {
       Registration(
         id: m['id'] as String,
         eventId: m['event_id'] as String,
+        userId: m['user_id'] as String?,
         fullName: m['full_name'] as String,
         rollNumber: m['roll_number'] as String,
         department: m['department'] as String? ?? '',

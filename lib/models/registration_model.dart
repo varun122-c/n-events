@@ -1,6 +1,7 @@
 class Registration {
   final String id;
   final String eventId;
+  final String? userId;
   final String fullName;
   final String rollNumber;
   final String department;
@@ -16,6 +17,7 @@ class Registration {
   Registration({
     required this.id,
     required this.eventId,
+    this.userId,
     required this.fullName,
     required this.rollNumber,
     required this.department,
@@ -33,6 +35,7 @@ class Registration {
     return {
       'id': id,
       'eventId': eventId,
+      'userId': userId,
       'fullName': fullName,
       'rollNumber': rollNumber,
       'department': department,
@@ -51,6 +54,7 @@ class Registration {
     return Registration(
       id: json['id'] as String,
       eventId: json['eventId'] as String,
+      userId: json['userId'] as String?,
       fullName: json['fullName'] as String,
       rollNumber: json['rollNumber'] as String,
       department: json['department'] as String? ?? 'Computer Science and Engineering (CSE)',
@@ -68,6 +72,7 @@ class Registration {
   Registration copyWith({
     String? id,
     String? eventId,
+    String? userId,
     String? fullName,
     String? rollNumber,
     String? department,
@@ -83,6 +88,7 @@ class Registration {
     return Registration(
       id: id ?? this.id,
       eventId: eventId ?? this.eventId,
+      userId: userId ?? this.userId,
       fullName: fullName ?? this.fullName,
       rollNumber: rollNumber ?? this.rollNumber,
       department: department ?? this.department,

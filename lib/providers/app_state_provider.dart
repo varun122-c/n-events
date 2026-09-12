@@ -420,11 +420,15 @@ class AppStateProvider extends ChangeNotifier {
     required String phoneNumber,
     String? userId,
   }) async {
-    // Check if already registered locally
+    final currentUserId = userId ?? SupabaseService.currentUser?.id;
+
+    // Check if already registered locally or in fetched records
     final alreadyRegistered = _registrations.any(
       (r) =>
           r.eventId == eventId &&
-          r.rollNumber.toLowerCase() == rollNumber.toLowerCase(),
+          r.status != 'Cancelled' &&
+          ((rollNumber.isNotEmpty && r.rollNumber.toLowerCase() == rollNumber.toLowerCase()) ||
+           (currentUserId != null && currentUserId.isNotEmpty && r.userId == currentUserId)),
     );
 
     if (alreadyRegistered) return false;
@@ -432,6 +436,7 @@ class AppStateProvider extends ChangeNotifier {
     final newReg = Registration(
       id: _uuid.v4(),
       eventId: eventId,
+      userId: currentUserId,
       fullName: fullName,
       rollNumber: rollNumber,
       department: department,
@@ -442,12 +447,16 @@ class AppStateProvider extends ChangeNotifier {
       status: 'Registered',
     );
 
+    // Write to Supabase first
+    final dbSuccess = await SupabaseDbService.insertRegistration(newReg, userId: currentUserId);
+
+    if (!dbSuccess && SupabaseService.isInitialized) {
+      debugPrint('registerForEvent: Supabase DB insert failed for event $eventId');
+      return false;
+    }
+
     _registrations.add(newReg);
     await _saveRegistrations();
-
-    // Write to Supabase
-    final currentUserId = userId ?? SupabaseService.currentUser?.id;
-    await SupabaseDbService.insertRegistration(newReg, userId: currentUserId);
 
     // Trigger notification
     final eventIndex = _events.indexWhere((e) => e.id == eventId);
