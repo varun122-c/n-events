@@ -46,6 +46,43 @@ create policy "Admins can view all profiles" on public.profiles for select using
   exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
 );
 
+-- ─── AUTO-CREATE PROFILE ON SIGNUP TRIGGER ───────────────────
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (
+    id, name, roll_number, department, college, year, phone, dob, gender, role, avatar_index
+  )
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'roll_number', ''),
+    coalesce(new.raw_user_meta_data->>'department', 'Computer Science and Engineering (CSE)'),
+    coalesce(new.raw_user_meta_data->>'college', 'Annamacharya Institute of Technology and Sciences, Tirupati (AITS TPT)'),
+    coalesce(new.raw_user_meta_data->>'year', '1st Year'),
+    coalesce(new.raw_user_meta_data->>'phone', ''),
+    coalesce(new.raw_user_meta_data->>'dob', ''),
+    coalesce(new.raw_user_meta_data->>'gender', 'Male'),
+    coalesce(new.raw_user_meta_data->>'role', 'student'),
+    coalesce((new.raw_user_meta_data->>'avatar_index')::int, 0)
+  )
+  on conflict (id) do update set
+    name = excluded.name,
+    roll_number = case when excluded.roll_number <> '' then excluded.roll_number else public.profiles.roll_number end,
+    department = case when excluded.department <> '' then excluded.department else public.profiles.department end,
+    college = case when excluded.college <> '' then excluded.college else public.profiles.college end,
+    year = case when excluded.year <> '' then excluded.year else public.profiles.year end,
+    phone = case when excluded.phone <> '' then excluded.phone else public.profiles.phone end,
+    updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
 -- ─── EVENTS ──────────────────────────────────────────────────
 create table if not exists public.events (
   id                text primary key default gen_random_uuid()::text,
