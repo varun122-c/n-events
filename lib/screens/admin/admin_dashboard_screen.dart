@@ -548,6 +548,26 @@ class AdminDashboardScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
+                    color: event.dateTime.isBefore(DateTime.now())
+                        ? (isDark ? const Color(0xFF3F3F46) : const Color(0xFFE2E8F0))
+                        : (isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDBEAFE)),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    event.dateTime.isBefore(DateTime.now()) ? 'COMPLETED' : 'UPCOMING',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      color: event.dateTime.isBefore(DateTime.now())
+                          ? (isDark ? const Color(0xFFA1A1AA) : const Color(0xFF64748B))
+                          : (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB)),
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5),
                     borderRadius: BorderRadius.circular(6),
                   ),

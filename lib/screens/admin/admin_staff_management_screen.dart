@@ -291,38 +291,63 @@ class _AdminStaffManagementScreenState
                   style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
           ],
         ),
-        trailing: PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert_rounded,
-              color: isDark ? const Color(0xFF6B7280) : const Color(0xFF94A3B8)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit Assignment')),
-            PopupMenuItem(
-              value: 'revoke',
-              child: Text('Revoke Role',
-                  style: const TextStyle(color: Color(0xFFEF4444))),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.person_remove_rounded, color: Color(0xFFEF4444), size: 20),
+              tooltip: 'Remove / Revoke Role',
+              onPressed: () async {
+                final confirm = await _confirmRevoke(context, s.userName);
+                if (confirm == true) {
+                  await stateProvider.revokeStaffRole(s.userId);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${s.userName}\'s staff role revoked successfully'),
+                        backgroundColor: const Color(0xFFEF4444),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded,
+                  color: isDark ? const Color(0xFF6B7280) : const Color(0xFF94A3B8)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit Assignment')),
+                const PopupMenuItem(
+                  value: 'revoke',
+                  child: Text('Remove / Revoke Role',
+                      style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                ),
+              ],
+              onSelected: (action) async {
+                if (action == 'revoke') {
+                  final confirm = await _confirmRevoke(context, s.userName);
+                  if (confirm == true) {
+                    await stateProvider.revokeStaffRole(s.userId);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${s.userName}\'s staff role revoked successfully'),
+                          backgroundColor: const Color(0xFFEF4444),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      );
+                    }
+                  }
+                } else if (action == 'edit') {
+                  _showAssignRoleSheet(context, existing: s);
+                }
+              },
             ),
           ],
-          onSelected: (action) async {
-            if (action == 'revoke') {
-              final confirm = await _confirmRevoke(context, s.userName);
-              if (confirm == true) {
-                await stateProvider.revokeStaffRole(s.userId);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${s.userName}\'s role revoked'),
-                      backgroundColor: const Color(0xFFEF4444),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  );
-                }
-              }
-            } else if (action == 'edit') {
-              _showAssignRoleSheet(context, existing: s);
-            }
-          },
         ),
       ),
     );
