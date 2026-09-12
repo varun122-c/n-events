@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/n_loading_indicator.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -208,25 +209,8 @@ class _SplashScreenState extends State<SplashScreen>
 
                         const SizedBox(height: 64),
 
-                        // Sleek customized loading indicator
-                        Container(
-                          width: 48,
-                          height: 48,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.06),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.15),
-                            ),
-                          ),
-                          child: const CircularProgressIndicator(
-                            strokeWidth: 3.0,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Color(0xFF818CF8),
-                            ),
-                          ),
-                        ),
+                        // Glowing Ñ brand loading indicator
+                        const NLoadingIndicator(size: 72),
                       ],
                     ),
                   ),
