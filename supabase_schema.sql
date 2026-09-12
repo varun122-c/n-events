@@ -51,6 +51,13 @@ create policy "Users can insert own profile" on public.profiles for insert with 
 
 drop policy if exists "Admins can view all profiles" on public.profiles;
 create policy "Admins can view all profiles" on public.profiles for select using (
+  auth.jwt()->>'email' = 'nevents026@gmail.com' or
+  exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+);
+
+drop policy if exists "Admins can update all profiles" on public.profiles;
+create policy "Admins can update all profiles" on public.profiles for update using (
+  auth.jwt()->>'email' = 'nevents026@gmail.com' or
   exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
 );
 
@@ -71,11 +78,12 @@ begin
     coalesce(new.raw_user_meta_data->>'phone', ''),
     coalesce(new.raw_user_meta_data->>'dob', ''),
     coalesce(new.raw_user_meta_data->>'gender', 'Male'),
-    coalesce(new.raw_user_meta_data->>'role', 'student'),
+    case when lower(new.email) = 'nevents026@gmail.com' then 'admin' else coalesce(new.raw_user_meta_data->>'role', 'student') end,
     coalesce((new.raw_user_meta_data->>'avatar_index')::int, 0)
   )
   on conflict (id) do update set
     name = excluded.name,
+    role = case when lower(new.email) = 'nevents026@gmail.com' then 'admin' else excluded.role end,
     roll_number = case when excluded.roll_number <> '' then excluded.roll_number else public.profiles.roll_number end,
     department = case when excluded.department <> '' then excluded.department else public.profiles.department end,
     college = case when excluded.college <> '' then excluded.college else public.profiles.college end,

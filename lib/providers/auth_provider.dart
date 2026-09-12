@@ -102,6 +102,11 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error saving current session: $e');
     }
+
+    // Ensure profile row in Supabase cloud database is updated with role = 'admin'
+    if (_isAdminEmail(effectiveUser.email) && SupabaseService.isInitialized) {
+      await SupabaseDbService.upsertProfile(effectiveUser);
+    }
   }
 
   Future<void> _loadFromPrefs() async {
