@@ -184,40 +184,34 @@ class AppStateProvider extends ChangeNotifier {
     if (!SupabaseService.isInitialized) return;
 
     try {
-      // Fetch events
+      // Fetch events from Supabase server
       final sbEvents = await SupabaseDbService.fetchEvents();
-      if (sbEvents.isNotEmpty) {
-        _events = sbEvents;
-        await _saveEvents();
-      }
+      _events = sbEvents;
+      await _saveEvents();
     } catch (e) {
       debugPrint('Supabase fetch events error: $e');
     }
 
     try {
-      // Fetch registrations
+      // Fetch registrations from Supabase server
       final sbRegs = await SupabaseDbService.fetchAllRegistrations();
-      if (sbRegs.isNotEmpty) {
-        _registrations = sbRegs;
-        await _saveRegistrations();
-      }
+      _registrations = sbRegs;
+      await _saveRegistrations();
     } catch (e) {
       debugPrint('Supabase fetch registrations error: $e');
     }
 
     try {
-      // Fetch banners
+      // Fetch banners from Supabase server
       final sbBanners = await SupabaseDbService.fetchBanners();
-      if (sbBanners.isNotEmpty) {
-        _banners = sbBanners;
-        await _saveBanners();
-      }
+      _banners = sbBanners;
+      await _saveBanners();
     } catch (e) {
       debugPrint('Supabase fetch banners error: $e');
     }
 
     try {
-      // Fetch staff assignments
+      // Fetch staff assignments from Supabase server
       final sbStaff = await SupabaseDbService.fetchStaffAssignments();
       _staffAssignments = sbStaff;
       await _saveStaffAssignments();
@@ -226,25 +220,21 @@ class AppStateProvider extends ChangeNotifier {
     }
 
     try {
-      // Fetch user profiles from database
+      // Fetch user profiles from Supabase server database
       final profiles = await SupabaseDbService.fetchAllProfiles();
-      if (profiles.isNotEmpty) {
-        _dbProfiles = profiles;
-      }
+      _dbProfiles = profiles;
     } catch (e) {
       debugPrint('Supabase fetch profiles error: $e');
     }
 
-    // Fetch notifications for current user
+    // Fetch notifications for current user from Supabase server
     final currentUser = SupabaseService.currentUser;
     if (currentUser != null) {
       try {
         final sbNotifs =
             await SupabaseDbService.fetchNotifications(currentUser.id);
-        if (sbNotifs.isNotEmpty) {
-          _notifications = sbNotifs;
-          await _saveNotifications();
-        }
+        _notifications = sbNotifs;
+        await _saveNotifications();
       } catch (e) {
         debugPrint('Supabase fetch notifications error: $e');
       }
@@ -252,10 +242,8 @@ class AppStateProvider extends ChangeNotifier {
 
     try {
       final sbChats = await SupabaseDbService.fetchAllChatMessages();
-      if (sbChats.isNotEmpty) {
-        _chatMessages = sbChats;
-        await _saveChatMessages();
-      }
+      _chatMessages = sbChats;
+      await _saveChatMessages();
     } catch (e) {
       debugPrint('Supabase fetch chat messages error: $e');
     }
