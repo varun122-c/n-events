@@ -1,5 +1,5 @@
 -- ============================================================
--- nEvents App — Supabase Database Schema
+-- nEvents App — Supabase Database Schema & Migrations
 -- Run this entire file in your Supabase SQL Editor
 -- ============================================================
 
@@ -24,6 +24,13 @@ create table if not exists public.profiles (
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
+
+-- Column migrations for existing tables
+alter table public.profiles add column if not exists sub_role text not null default '';
+alter table public.profiles add column if not exists custom_avatar_url text not null default '';
+alter table public.profiles add column if not exists participant_code text not null default '';
+alter table public.profiles add column if not exists assigned_department text not null default '';
+alter table public.profiles add column if not exists assigned_event_ids text[] not null default '{}';
 
 create or replace function public.handle_updated_at()
 returns trigger language plpgsql as $$
@@ -162,6 +169,11 @@ create table if not exists public.registrations (
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );
+
+-- Column migrations for existing registrations table
+alter table public.registrations add column if not exists verified_by text;
+alter table public.registrations add column if not exists verified_at timestamptz;
+alter table public.registrations add column if not exists is_certificate_published boolean not null default false;
 
 drop trigger if exists registrations_updated_at on public.registrations;
 create trigger registrations_updated_at before update on public.registrations for each row execute procedure public.handle_updated_at();

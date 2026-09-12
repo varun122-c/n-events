@@ -262,7 +262,7 @@ class SupabaseDbService {
           ? rawUser
           : _client!.auth.currentUser?.id;
 
-      await _client!.from('registrations').insert({
+      final Map<String, dynamic> payload = {
         'id': reg.id,
         'event_id': reg.eventId,
         'user_id': effectiveUserId,
@@ -274,10 +274,19 @@ class SupabaseDbService {
         'phone_number': reg.phoneNumber,
         'registration_date': reg.registrationDate.toIso8601String(),
         'status': reg.status,
-        'verified_by': reg.verifiedBy,
-        'verified_at': reg.verifiedAt?.toIso8601String(),
-        'is_certificate_published': reg.isCertificatePublished,
-      });
+      };
+
+      if (reg.verifiedBy != null && reg.verifiedBy!.isNotEmpty) {
+        payload['verified_by'] = reg.verifiedBy;
+      }
+      if (reg.verifiedAt != null) {
+        payload['verified_at'] = reg.verifiedAt!.toIso8601String();
+      }
+      if (reg.isCertificatePublished) {
+        payload['is_certificate_published'] = true;
+      }
+
+      await _client!.from('registrations').insert(payload);
       return true;
     } catch (e) {
       debugPrint('SupabaseDbService.insertRegistration error: $e');
