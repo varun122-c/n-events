@@ -21,6 +21,7 @@ import '../screens/staff/organizer_dashboard_screen.dart';
 import '../screens/staff/coordinator_dashboard_screen.dart';
 import '../screens/staff/tech_provider_screen.dart';
 import '../screens/staff/qr_scanner_screen.dart';
+import '../screens/offline_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -32,9 +33,10 @@ class AppRouter {
       final isLanding = state.uri.path == '/landing';
       final isAuth = state.uri.path == '/auth' || state.uri.path == '/role-selection';
       final isCallback = state.uri.path == '/login-callback';
+      final isOffline = state.uri.path == '/offline';
 
-      // Don't interrupt splash, landing, or OAuth callback
-      if (isSplash || isLanding || isCallback) return null;
+      // Don't interrupt splash, landing, OAuth callback, or offline screen
+      if (isSplash || isLanding || isCallback || isOffline) return null;
 
       // If user is not logged in and trying to access protected routes, redirect to /auth
       if (!authProvider.isLoggedIn && !isAuth) {
@@ -116,6 +118,14 @@ class AppRouter {
           context: context,
           state: state,
           child: const OAuthCallbackScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/offline',
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const OfflineScreen(),
         ),
       ),
 
