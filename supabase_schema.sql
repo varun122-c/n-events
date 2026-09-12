@@ -328,4 +328,14 @@ begin
     alter publication supabase_realtime add table public.chat_messages;
   exception when others then null;
   end;
+
+  begin
+    alter publication supabase_realtime add table public.profiles;
+  exception when others then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.staff_assignments;
+  exception when others then null;
+  end;
 end $$;
