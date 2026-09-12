@@ -377,7 +377,7 @@ class SupabaseDbService {
     'id': b.id,
     'title': b.title,
     'image_url': b.imageUrl,
-    'linked_event_id': b.linkedEventId,
+    'linked_event_id': (b.linkedEventId != null && b.linkedEventId!.isNotEmpty) ? b.linkedEventId : null,
     'display_order': b.displayOrder,
   };
 
@@ -486,13 +486,14 @@ class SupabaseDbService {
   }) async {
     if (!_isReady) return;
     try {
+      final sanitizedLinkedEventId = (n.linkedEventId != null && n.linkedEventId!.isNotEmpty) ? n.linkedEventId : null;
       await _client!.from('notifications').insert({
         'id': n.id,
         'user_id': userId,
         'title': n.title,
         'message': n.message,
         'is_read': n.isRead,
-        'linked_event_id': n.linkedEventId,
+        'linked_event_id': sanitizedLinkedEventId,
         'created_at': n.timestamp.toIso8601String(),
       });
     } catch (e) {

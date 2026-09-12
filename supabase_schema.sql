@@ -38,6 +38,27 @@ create trigger profiles_updated_at
   before update on public.profiles
   for each row execute procedure public.handle_updated_at();
 
+-- ─── HELPER FUNCTIONS TO PREVENT RLS INFINITE RECURSION ─────────
+create or replace function public.is_admin()
+returns boolean language sql security definer set search_path = public as $$
+  select coalesce(
+    (auth.jwt()->>'email' = 'nevents026@gmail.com'), false
+  ) or exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+create or replace function public.is_admin_or_staff()
+returns boolean language sql security definer set search_path = public as $$
+  select coalesce(
+    (auth.jwt()->>'email' = 'nevents026@gmail.com'), false
+  ) or exists (
+    select 1 from public.profiles
+    where id = auth.uid() and (role = 'admin' or sub_role <> '')
+  );
+$$;
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "Users can view own profile" on public.profiles;
@@ -52,13 +73,13 @@ create policy "Users can insert own profile" on public.profiles for insert with 
 drop policy if exists "Admins can view all profiles" on public.profiles;
 create policy "Admins can view all profiles" on public.profiles for select using (
   auth.jwt()->>'email' = 'nevents026@gmail.com' or
-  exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  public.is_admin()
 );
 
 drop policy if exists "Admins can update all profiles" on public.profiles;
 create policy "Admins can update all profiles" on public.profiles for update using (
   auth.jwt()->>'email' = 'nevents026@gmail.com' or
-  exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin')
+  public.is_admin()
 );
 
 -- ─── AUTO-CREATE PROFILE ON SIGNUP TRIGGER ───────────────────
@@ -127,17 +148,17 @@ create policy "Anyone can view events" on public.events for select using (true);
 
 drop policy if exists "Admins can insert events" on public.events;
 create policy "Admins can insert events" on public.events for insert with check (
-  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  public.is_admin()
 );
 
 drop policy if exists "Admins can update events" on public.events;
 create policy "Admins can update events" on public.events for update using (
-  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  public.is_admin()
 );
 
 drop policy if exists "Admins can delete events" on public.events;
 create policy "Admins can delete events" on public.events for delete using (
-  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  public.is_admin()
 );
 
 -- ─── REGISTRATIONS ───────────────────────────────────────────
@@ -153,6 +174,9 @@ create table if not exists public.registrations (
   phone_number        text not null default '',
   registration_date   timestamptz not null default now(),
   status              text not null default 'Registered',
+  verified_by         text,
+  verified_at         timestamptz,
+  is_certificate_published boolean not null default false,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );
@@ -171,7 +195,7 @@ create policy "Users can view own registrations" on public.registrations for sel
 
 drop policy if exists "Admins and staff can view all registrations" on public.registrations;
 create policy "Admins and staff can view all registrations" on public.registrations for select using (
-  exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or sub_role != ''))
+  public.is_admin_or_staff()
 );
 
 drop policy if exists "Authenticated users can register" on public.registrations;
@@ -179,7 +203,7 @@ create policy "Authenticated users can register" on public.registrations for ins
 
 drop policy if exists "Admins and staff can update status" on public.registrations;
 create policy "Admins and staff can update status" on public.registrations for update using (
-  exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or sub_role != ''))
+  public.is_admin_or_staff()
 );
 
 -- ─── BANNERS ─────────────────────────────────────────────────
@@ -203,7 +227,7 @@ create policy "Anyone can view banners" on public.banners for select using (true
 
 drop policy if exists "Admins can manage banners" on public.banners;
 create policy "Admins can manage banners" on public.banners for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  public.is_admin()
 );
 
 -- ─── STAFF ASSIGNMENTS ───────────────────────────────────────
@@ -229,7 +253,7 @@ create policy "Staff can view own assignment" on public.staff_assignments for se
 
 drop policy if exists "Admins can manage all staff assignments" on public.staff_assignments;
 create policy "Admins can manage all staff assignments" on public.staff_assignments for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  public.is_admin()
 );
 
 -- ─── NOTIFICATIONS ───────────────────────────────────────────
@@ -258,7 +282,7 @@ create policy "Authenticated users can insert notifications" on public.notificat
 
 drop policy if exists "Admins can delete notifications" on public.notifications;
 create policy "Admins can delete notifications" on public.notifications for delete using (
-  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  public.is_admin()
 );
 
 -- ─── CHAT MESSAGES ───────────────────────────────────────────
@@ -283,7 +307,6 @@ drop policy if exists "Authenticated users can send messages" on public.chat_mes
 create policy "Authenticated users can send messages" on public.chat_messages for insert with check (auth.uid() is not null);
 
 -- ─── ENABLE REALTIME ─────────────────────────────────────────
--- Safe Realtime table registration:
 do $$
 begin
   begin
