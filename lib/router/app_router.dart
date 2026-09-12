@@ -1,5 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../providers/auth_provider.dart';
+import '../widgets/animated_page_route.dart';
 import '../screens/splash_screen.dart';
 import '../screens/auth/auth_screen.dart';
 import '../screens/auth/oauth_callback_screen.dart';
@@ -22,109 +26,236 @@ import '../screens/staff/qr_scanner_screen.dart';
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: '/splash',
+    redirect: (BuildContext context, GoRouterState state) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      final isSplash = state.uri.path == '/splash';
+      final isAuth = state.uri.path == '/auth' || state.uri.path == '/role-selection';
+      final isCallback = state.uri.path == '/login-callback';
+
+      // Don't interrupt splash or OAuth callback during initialization
+      if (isSplash || isCallback) return null;
+
+      // If user is not logged in and trying to access protected routes, redirect to /auth
+      if (!authProvider.isLoggedIn && !isAuth) {
+        return '/auth';
+      }
+
+      // If user is logged in and trying to access /auth or /role-selection, redirect to their home route
+      if (authProvider.isLoggedIn && isAuth) {
+        return authProvider.homeRoute;
+      }
+
+      // Role-Based Access Control (RBAC) URL redirects
+      if (authProvider.isLoggedIn) {
+        final role = authProvider.role;
+        final subRole = authProvider.subRole;
+
+        // Non-admin trying to access /admin routes
+        if (state.uri.path.startsWith('/admin') && role != 'admin') {
+          return authProvider.homeRoute;
+        }
+
+        // Staff route protection
+        if (state.uri.path.startsWith('/staff/organizer') && subRole != 'organizer' && role != 'admin') {
+          return authProvider.homeRoute;
+        }
+        if (state.uri.path.startsWith('/staff/coordinator') && subRole != 'coordinator' && role != 'admin') {
+          return authProvider.homeRoute;
+        }
+        if (state.uri.path.startsWith('/staff/tech') && subRole != 'tech_provider' && role != 'admin') {
+          return authProvider.homeRoute;
+        }
+        if (state.uri.path.startsWith('/staff/scanner') && subRole != 'scanner' && role != 'admin') {
+          return authProvider.homeRoute;
+        }
+      }
+
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/splash',
-        builder: (context, state) => const SplashScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const SplashScreen(),
+        ),
       ),
       GoRoute(
         path: '/role-selection',
-        builder: (context, state) => const AuthScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AuthScreen(),
+        ),
       ),
       GoRoute(
         path: '/auth',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final tab = state.uri.queryParameters['tab'] ?? 'signin';
           final role = state.uri.queryParameters['role'] ?? 'student';
-          return AuthScreen(initialTab: tab, initialRole: role);
+          return buildAnimatedPage(
+            context: context,
+            state: state,
+            child: AuthScreen(initialTab: tab, initialRole: role),
+          );
         },
       ),
       GoRoute(
         path: '/login-callback',
-        builder: (context, state) => const OAuthCallbackScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const OAuthCallbackScreen(),
+        ),
       ),
 
       // ─── Student Routes ───────────────────────────────────────────────────
       GoRoute(
         path: '/student',
-        builder: (context, state) => const StudentMainNavigation(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const StudentMainNavigation(),
+        ),
       ),
       GoRoute(
         path: '/my-tickets',
-        builder: (context, state) => const StudentTicketsScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const StudentTicketsScreen(),
+        ),
       ),
       GoRoute(
         path: '/student/event/:id',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final eventId = state.pathParameters['id']!;
-          return EventDetailsScreen(eventId: eventId);
+          return buildAnimatedPage(
+            context: context,
+            state: state,
+            child: EventDetailsScreen(eventId: eventId),
+          );
         },
       ),
       GoRoute(
         path: '/student/chat/:eventId/:studentRoll',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final eventId = state.pathParameters['eventId']!;
           final studentRoll = state.pathParameters['studentRoll']!;
-          return StudentCoordinatorChatScreen(eventId: eventId, studentRoll: studentRoll);
+          return buildAnimatedPage(
+            context: context,
+            state: state,
+            child: StudentCoordinatorChatScreen(eventId: eventId, studentRoll: studentRoll),
+          );
         },
       ),
 
       // ─── Admin Routes ─────────────────────────────────────────────────────
       GoRoute(
         path: '/admin',
-        builder: (context, state) => const AdminDashboardScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminDashboardScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin/event-form',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final eventId = state.uri.queryParameters['id'];
-          return AdminEventFormScreen(eventId: eventId);
+          return buildAnimatedPage(
+            context: context,
+            state: state,
+            child: AdminEventFormScreen(eventId: eventId),
+          );
         },
       ),
       GoRoute(
         path: '/admin/participants/:id',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final eventId = state.pathParameters['id']!;
-          return AdminParticipantsScreen(eventId: eventId);
+          return buildAnimatedPage(
+            context: context,
+            state: state,
+            child: AdminParticipantsScreen(eventId: eventId),
+          );
         },
       ),
       GoRoute(
         path: '/admin/banners',
-        builder: (context, state) => const AdminBannerCustomizerScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminBannerCustomizerScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin/chats',
-        builder: (context, state) => const AdminChatsScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminChatsScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin/staff',
-        builder: (context, state) => const AdminStaffManagementScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminStaffManagementScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin/users',
-        builder: (context, state) => const AdminUserDirectoryScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminUserDirectoryScreen(),
+        ),
       ),
 
       // ─── Staff Routes ─────────────────────────────────────────────────────
       GoRoute(
         path: '/staff/organizer',
-        builder: (context, state) => const OrganizerDashboardScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const OrganizerDashboardScreen(),
+        ),
       ),
       GoRoute(
         path: '/staff/coordinator',
-        builder: (context, state) => const CoordinatorDashboardScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const CoordinatorDashboardScreen(),
+        ),
       ),
       GoRoute(
         path: '/staff/coordinator/chats',
-        builder: (context, state) => const AdminChatsScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminChatsScreen(),
+        ),
       ),
       GoRoute(
         path: '/staff/tech',
-        builder: (context, state) => const TechProviderScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const TechProviderScreen(),
+        ),
       ),
       GoRoute(
         path: '/staff/scanner',
-        builder: (context, state) => const QrScannerScreen(),
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const QrScannerScreen(),
+        ),
       ),
     ],
     errorBuilder: (context, state) {

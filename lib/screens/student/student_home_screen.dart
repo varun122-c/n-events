@@ -1244,29 +1244,36 @@ class AnimatedEventCard extends StatefulWidget {
 
 class _AnimatedEventCardState extends State<AnimatedEventCard> {
   bool _isPressed = false;
+  bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 350 + (widget.index * 70).clamp(0, 500)),
+      duration: Duration(milliseconds: 350 + (widget.index * 60).clamp(0, 450)),
       tween: Tween<double>(begin: 0.0, end: 1.0),
       curve: Curves.easeOutCubic,
       builder: (context, value, child) {
+        final currentScale = _isPressed
+            ? 0.96
+            : (_isHovered ? 1.02 : 1.0);
+
         return Transform.translate(
           offset: Offset(0, (1 - value) * 28),
-          child: Transform.scale(
-            scale: (0.94 + (0.06 * value)).clamp(0.94, 1.0),
-            child: Opacity(
-              opacity: value.clamp(0.0, 1.0),
+          child: Opacity(
+            opacity: value.clamp(0.0, 1.0),
+            child: MouseRegion(
+              onEnter: (_) => setState(() => _isHovered = true),
+              onExit: (_) => setState(() => _isHovered = false),
               child: GestureDetector(
                 onTapDown: (_) => setState(() => _isPressed = true),
                 onTapUp: (_) => setState(() => _isPressed = false),
                 onTapCancel: () => setState(() => _isPressed = false),
                 onTap: widget.onTap,
-                child: AnimatedScale(
-                  scale: _isPressed ? 0.95 : 1.0,
-                  duration: const Duration(milliseconds: 140),
-                  curve: Curves.easeInOutCubic,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  transform: Matrix4.diagonal3Values(currentScale, currentScale, 1.0),
+                  transformAlignment: Alignment.center,
                   child: widget.child,
                 ),
               ),
