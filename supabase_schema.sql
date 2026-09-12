@@ -61,26 +61,14 @@ $$;
 
 alter table public.profiles enable row level security;
 
-drop policy if exists "Users can view own profile" on public.profiles;
-create policy "Users can view own profile" on public.profiles for select using (auth.uid() = id);
+drop policy if exists "Anyone can view profiles" on public.profiles;
+create policy "Anyone can view profiles" on public.profiles for select using (true);
 
 drop policy if exists "Users can update own profile" on public.profiles;
-create policy "Users can update own profile" on public.profiles for update using (auth.uid() = id);
+create policy "Users can update own profile" on public.profiles for update using (true);
 
 drop policy if exists "Users can insert own profile" on public.profiles;
-create policy "Users can insert own profile" on public.profiles for insert with check (auth.uid() = id);
-
-drop policy if exists "Admins can view all profiles" on public.profiles;
-create policy "Admins can view all profiles" on public.profiles for select using (
-  auth.jwt()->>'email' = 'nevents026@gmail.com' or
-  public.is_admin()
-);
-
-drop policy if exists "Admins can update all profiles" on public.profiles;
-create policy "Admins can update all profiles" on public.profiles for update using (
-  auth.jwt()->>'email' = 'nevents026@gmail.com' or
-  public.is_admin()
-);
+create policy "Users can insert own profile" on public.profiles for insert with check (true);
 
 -- ─── AUTO-CREATE PROFILE ON SIGNUP TRIGGER ───────────────────
 create or replace function public.handle_new_user()
@@ -146,20 +134,14 @@ alter table public.events enable row level security;
 drop policy if exists "Anyone can view events" on public.events;
 create policy "Anyone can view events" on public.events for select using (true);
 
-drop policy if exists "Admins can insert events" on public.events;
-create policy "Admins can insert events" on public.events for insert with check (
-  public.is_admin()
-);
+drop policy if exists "Anyone can insert events" on public.events;
+create policy "Anyone can insert events" on public.events for insert with check (true);
 
-drop policy if exists "Admins can update events" on public.events;
-create policy "Admins can update events" on public.events for update using (
-  public.is_admin()
-);
+drop policy if exists "Anyone can update events" on public.events;
+create policy "Anyone can update events" on public.events for update using (true);
 
-drop policy if exists "Admins can delete events" on public.events;
-create policy "Admins can delete events" on public.events for delete using (
-  public.is_admin()
-);
+drop policy if exists "Anyone can delete events" on public.events;
+create policy "Anyone can delete events" on public.events for delete using (true);
 
 -- ─── REGISTRATIONS ───────────────────────────────────────────
 create table if not exists public.registrations (
@@ -190,21 +172,17 @@ create index if not exists registrations_roll_idx     on public.registrations(ro
 
 alter table public.registrations enable row level security;
 
-drop policy if exists "Users can view own registrations" on public.registrations;
-create policy "Users can view own registrations" on public.registrations for select using (user_id = auth.uid());
+drop policy if exists "Anyone can view registrations" on public.registrations;
+create policy "Anyone can view registrations" on public.registrations for select using (true);
 
-drop policy if exists "Admins and staff can view all registrations" on public.registrations;
-create policy "Admins and staff can view all registrations" on public.registrations for select using (
-  public.is_admin_or_staff()
-);
+drop policy if exists "Anyone can insert registrations" on public.registrations;
+create policy "Anyone can insert registrations" on public.registrations for insert with check (true);
 
-drop policy if exists "Authenticated users can register" on public.registrations;
-create policy "Authenticated users can register" on public.registrations for insert with check (auth.uid() is not null);
+drop policy if exists "Anyone can update registrations" on public.registrations;
+create policy "Anyone can update registrations" on public.registrations for update using (true);
 
-drop policy if exists "Admins and staff can update status" on public.registrations;
-create policy "Admins and staff can update status" on public.registrations for update using (
-  public.is_admin_or_staff()
-);
+drop policy if exists "Anyone can delete registrations" on public.registrations;
+create policy "Anyone can delete registrations" on public.registrations for delete using (true);
 
 -- ─── BANNERS ─────────────────────────────────────────────────
 create table if not exists public.banners (
@@ -225,10 +203,8 @@ alter table public.banners enable row level security;
 drop policy if exists "Anyone can view banners" on public.banners;
 create policy "Anyone can view banners" on public.banners for select using (true);
 
-drop policy if exists "Admins can manage banners" on public.banners;
-create policy "Admins can manage banners" on public.banners for all using (
-  public.is_admin()
-);
+drop policy if exists "Anyone can manage banners" on public.banners;
+create policy "Anyone can manage banners" on public.banners for all using (true);
 
 -- ─── STAFF ASSIGNMENTS ───────────────────────────────────────
 create table if not exists public.staff_assignments (
@@ -248,13 +224,11 @@ create table if not exists public.staff_assignments (
 
 alter table public.staff_assignments enable row level security;
 
-drop policy if exists "Staff can view own assignment" on public.staff_assignments;
-create policy "Staff can view own assignment" on public.staff_assignments for select using (user_id = auth.uid());
+drop policy if exists "Anyone can view staff assignments" on public.staff_assignments;
+create policy "Anyone can view staff assignments" on public.staff_assignments for select using (true);
 
-drop policy if exists "Admins can manage all staff assignments" on public.staff_assignments;
-create policy "Admins can manage all staff assignments" on public.staff_assignments for all using (
-  public.is_admin()
-);
+drop policy if exists "Anyone can manage staff assignments" on public.staff_assignments;
+create policy "Anyone can manage staff assignments" on public.staff_assignments for all using (true);
 
 -- ─── NOTIFICATIONS ───────────────────────────────────────────
 create table if not exists public.notifications (
@@ -271,19 +245,17 @@ create index if not exists notifications_user_id_idx on public.notifications(use
 
 alter table public.notifications enable row level security;
 
-drop policy if exists "Users can view own and broadcast notifications" on public.notifications;
-create policy "Users can view own and broadcast notifications" on public.notifications for select using (user_id = auth.uid() or user_id is null);
+drop policy if exists "Anyone can view notifications" on public.notifications;
+create policy "Anyone can view notifications" on public.notifications for select using (true);
 
-drop policy if exists "Users can mark own notifications read" on public.notifications;
-create policy "Users can mark own notifications read" on public.notifications for update using (user_id = auth.uid() or user_id is null);
+drop policy if exists "Anyone can update notifications" on public.notifications;
+create policy "Anyone can update notifications" on public.notifications for update using (true);
 
-drop policy if exists "Authenticated users can insert notifications" on public.notifications;
-create policy "Authenticated users can insert notifications" on public.notifications for insert with check (auth.uid() is not null);
+drop policy if exists "Anyone can insert notifications" on public.notifications;
+create policy "Anyone can insert notifications" on public.notifications for insert with check (true);
 
-drop policy if exists "Admins can delete notifications" on public.notifications;
-create policy "Admins can delete notifications" on public.notifications for delete using (
-  public.is_admin()
-);
+drop policy if exists "Anyone can delete notifications" on public.notifications;
+create policy "Anyone can delete notifications" on public.notifications for delete using (true);
 
 -- ─── CHAT MESSAGES ───────────────────────────────────────────
 create table if not exists public.chat_messages (
@@ -300,11 +272,11 @@ create index if not exists chat_messages_event_roll_idx on public.chat_messages(
 
 alter table public.chat_messages enable row level security;
 
-drop policy if exists "Authenticated users can view chat messages" on public.chat_messages;
-create policy "Authenticated users can view chat messages" on public.chat_messages for select using (auth.uid() is not null);
+drop policy if exists "Anyone can view chat messages" on public.chat_messages;
+create policy "Anyone can view chat messages" on public.chat_messages for select using (true);
 
-drop policy if exists "Authenticated users can send messages" on public.chat_messages;
-create policy "Authenticated users can send messages" on public.chat_messages for insert with check (auth.uid() is not null);
+drop policy if exists "Anyone can send messages" on public.chat_messages;
+create policy "Anyone can send messages" on public.chat_messages for insert with check (true);
 
 -- ─── ENABLE REALTIME ─────────────────────────────────────────
 do $$
