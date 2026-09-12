@@ -18,6 +18,9 @@ class AdminDashboardScreen extends StatelessWidget {
     // Calculate metrics
     final totalEvents = stateProvider.events.length;
     final totalRegistrations = stateProvider.registrations.length;
+    final totalUsersCount = stateProvider.dbProfiles.isNotEmpty
+        ? stateProvider.dbProfiles.length
+        : (authProvider.registeredUsers.length + (authProvider.isLoggedIn ? 1 : 0));
     
     // Recent registrations feed
     final recentRegs = stateProvider.registrations.reversed.take(4).toList();
@@ -209,7 +212,7 @@ class AdminDashboardScreen extends StatelessWidget {
                   child: _buildMetricCard(
                     context,
                     title: 'Users & Logins',
-                    value: (authProvider.registeredUsers.length + 1).toString(),
+                    value: totalUsersCount.toString(),
                     icon: Icons.account_circle_outlined,
                     color: const Color(0xFF8B5CF6),
                   ),
