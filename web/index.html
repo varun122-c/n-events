@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!-- Placeholder for base href that will be replaced by the value of the `--base-href` argument provided to `flutter build` -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="N Events — Campus Event Hub & Registration Portal">
+
+  <!-- Performance & Pre-connect optimization -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://www.gstatic.com">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -38,47 +42,55 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      flex-direction: column;
     }
     .logo-wrapper {
       position: relative;
-      width: 100px;
-      height: 100px;
+      width: 90px;
+      height: 90px;
       display: flex;
       justify-content: center;
       align-items: center;
     }
     .spinner-ring {
       position: absolute;
-      width: 96px;
-      height: 96px;
+      width: 86px;
+      height: 86px;
       border: 3.5px solid rgba(129, 140, 248, 0.15);
       border-top: 3.5px solid #818CF8;
       border-right: 3.5px solid #C084FC;
       border-radius: 50%;
-      animation: spin 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+      animation: spin 1s linear infinite;
     }
     .n-badge {
-      width: 72px;
-      height: 72px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
       background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #C084FC 100%);
       display: flex;
       justify-content: center;
       align-items: center;
-      font-size: 40px;
+      font-size: 36px;
       font-weight: 900;
       color: #FFFFFF;
       box-shadow: 0 0 35px rgba(99, 102, 241, 0.6);
-      animation: pulse 1.8s ease-in-out infinite;
+      animation: pulse 1.5s ease-in-out infinite;
       user-select: none;
+    }
+    .loading-text {
+      margin-top: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.7);
     }
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
     @keyframes pulse {
-      0%, 100% { transform: scale(0.95); box-shadow: 0 0 30px rgba(99, 102, 241, 0.5); }
-      50% { transform: scale(1.08); box-shadow: 0 0 50px rgba(168, 85, 247, 0.8); }
+      0%, 100% { transform: scale(0.96); box-shadow: 0 0 30px rgba(99, 102, 241, 0.5); }
+      50% { transform: scale(1.05); box-shadow: 0 0 45px rgba(168, 85, 247, 0.8); }
     }
   </style>
 </head>
@@ -86,26 +98,26 @@
   <div class="loading-container" id="loading">
     <div class="logo-wrapper">
       <div class="spinner-ring"></div>
-      <div class="n-badge">Ñ</div>
+      <div class="n-badge">N</div>
     </div>
+    <div class="loading-text">Loading nEvents...</div>
   </div>
   <script>
     function removeLoadingIndicator() {
       var loading = document.getElementById('loading');
       if (loading) {
         loading.style.opacity = '0';
-        loading.style.transition = 'opacity 0.4s ease-out';
+        loading.style.transition = 'opacity 0.3s ease-out';
         setTimeout(function () {
           if (loading && loading.parentNode) {
             loading.parentNode.removeChild(loading);
           }
-        }, 400);
+        }, 300);
       }
     }
 
     window.addEventListener('flutter-first-frame', removeLoadingIndicator);
 
-    // MutationObserver fallback to remove loading element as soon as Flutter DOM node is inserted
     var observer = new MutationObserver(function (mutations) {
       if (document.querySelector('flutter-view') || document.querySelector('flt-glass-pane') || document.querySelector('flt-renderer')) {
         removeLoadingIndicator();
