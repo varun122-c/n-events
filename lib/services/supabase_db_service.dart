@@ -8,6 +8,7 @@ import '../models/chat_message_model.dart';
 import '../models/staff_assignment_model.dart';
 import '../models/user_model.dart';
 import '../models/review_model.dart';
+import '../models/certificate_template_model.dart';
 import 'supabase_service.dart';
 
 /// Central service for all Supabase database operations.
@@ -183,7 +184,10 @@ class SupabaseDbService {
     'coordinator_name': e.coordinatorName,
     'coordinator_phone': e.coordinatorPhone,
     'max_seats': e.maxSeats,
+    'price': e.price,
     'reviews': e.reviews.map((r) => r.toJson()).toList(),
+    'sub_events': e.subEvents.map((s) => s.toJson()).toList(),
+    'combo_offers': e.comboOffers.map((c) => c.toJson()).toList(),
   };
 
   static Event _eventFromMap(Map<String, dynamic> m) {
@@ -194,18 +198,38 @@ class SupabaseDbService {
           .map((r) => Review.fromJson(r as Map<String, dynamic>))
           .toList();
     }
+
+    final subEventsRaw = m['sub_events'];
+    List<SubEvent> subEvents = [];
+    if (subEventsRaw is List) {
+      subEvents = subEventsRaw
+          .map((s) => SubEvent.fromJson(s as Map<String, dynamic>))
+          .toList();
+    }
+
+    final comboOffersRaw = m['combo_offers'];
+    List<ComboOffer> comboOffers = [];
+    if (comboOffersRaw is List) {
+      comboOffers = comboOffersRaw
+          .map((c) => ComboOffer.fromJson(c as Map<String, dynamic>))
+          .toList();
+    }
+
     return Event(
       id: m['id'] as String,
       title: m['title'] as String,
       description: m['description'] as String? ?? '',
       bannerUrl: m['banner_url'] as String? ?? '',
-      dateTime: DateTime.parse(m['date_time'] as String),
+      dateTime: DateTime.tryParse(m['date_time']?.toString() ?? '') ?? DateTime.now(),
       venue: m['venue'] as String? ?? '',
       category: m['category'] as String? ?? 'Technical',
       coordinatorName: m['coordinator_name'] as String? ?? '',
       coordinatorPhone: m['coordinator_phone'] as String? ?? '',
       maxSeats: m['max_seats'] as int? ?? 100,
+      price: (m['price'] as num?)?.toDouble() ?? 0.0,
       reviews: reviews,
+      subEvents: subEvents,
+      comboOffers: comboOffers,
     );
   }
 
@@ -305,6 +329,8 @@ class SupabaseDbService {
             'verified_by': reg.verifiedBy,
             'verified_at': reg.verifiedAt?.toIso8601String(),
             'is_certificate_published': reg.isCertificatePublished,
+            'is_paid': reg.isPaid,
+            'payment_note': reg.paymentNote,
           })
           .eq('id', reg.id);
     } catch (e) {
@@ -340,11 +366,13 @@ class SupabaseDbService {
         yearOfStudy: m['year_of_study'] as String? ?? '',
         phoneNumber: m['phone_number'] as String? ?? '',
         registrationDate:
-            DateTime.parse(m['registration_date'] as String),
+            DateTime.tryParse(m['registration_date']?.toString() ?? '') ?? DateTime.now(),
         status: m['status'] as String? ?? 'Registered',
         verifiedBy: m['verified_by'] as String?,
         verifiedAt: m['verified_at'] != null ? DateTime.tryParse(m['verified_at'] as String) : null,
         isCertificatePublished: m['is_certificate_published'] as bool? ?? false,
+        isPaid: m['is_paid'] as bool? ?? false,
+        paymentNote: m['payment_note'] as String? ?? '',
       );
 
   // ─── BANNERS ─────────────────────────────────────────────────────────────
@@ -561,7 +589,7 @@ class SupabaseDbService {
         id: m['id'] as String,
         title: m['title'] as String,
         message: m['message'] as String,
-        timestamp: DateTime.parse(m['created_at'] as String),
+        timestamp: DateTime.tryParse(m['created_at']?.toString() ?? '') ?? DateTime.now(),
         isRead: m['is_read'] as bool? ?? false,
         linkedEventId: m['linked_event_id'] as String?,
       );
@@ -653,7 +681,7 @@ class SupabaseDbService {
         studentName: m['student_name'] as String,
         senderRole: m['sender_role'] as String,
         text: m['text'] as String,
-        timestamp: DateTime.parse(m['created_at'] as String),
+        timestamp: DateTime.tryParse(m['created_at']?.toString() ?? '') ?? DateTime.now(),
         isRead: m['is_read'] as bool? ?? false,
         status: m['status'] as String? ?? 'sent',
       );
@@ -759,6 +787,44 @@ class SupabaseDbService {
           },
         )
         .subscribe();
+  }
+
+  // ─── CERTIFICATE TEMPLATES ──────────────────────────────────────────────
+
+  static Future<List<CertificateTemplate>> fetchCertificateTemplates() async {
+    if (!_isReady) return [];
+    try {
+      final data = await _client!.from('certificate_templates').select();
+      return (data as List<dynamic>)
+          .map((m) => CertificateTemplate.fromMap(m as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('SupabaseDbService.fetchCertificateTemplates error: $e');
+      return [];
+    }
+  }
+
+  static Future<void> upsertCertificateTemplate(CertificateTemplate t) async {
+    if (!_isReady) return;
+    try {
+      await _client!.from('certificate_templates').upsert({
+        'id': t.id,
+        'event_id': t.eventId,
+        'title': t.title,
+        'subtitle': t.subtitle,
+        'body_text': t.bodyText,
+        'signatory_name1': t.signatoryName1,
+        'signatory_role1': t.signatoryRole1,
+        'signatory_name2': t.signatoryName2,
+        'signatory_role2': t.signatoryRole2,
+        'theme_color_hex': t.themeColorHex,
+        'badge_style': t.badgeStyle,
+        'canva_url': t.canvaUrl,
+        'updated_at': t.updatedAt.toIso8601String(),
+      }, onConflict: 'event_id');
+    } catch (e) {
+      debugPrint('SupabaseDbService.upsertCertificateTemplate error: $e');
+    }
   }
 
   /// Unsubscribe from a realtime channel.

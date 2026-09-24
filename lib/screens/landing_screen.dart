@@ -179,7 +179,7 @@ class _LandingScreenState extends State<LandingScreen>
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                'N-EVENTS',
+                                'N EVENTS',
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w900,
@@ -536,7 +536,7 @@ class _LandingScreenState extends State<LandingScreen>
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            '© 2026 N-Events • Annamacharya Institute of Technology and Sciences',
+                            '© 2026 N Events • Annamacharya Institute of Technology and Sciences',
                             style: TextStyle(
                               fontSize: 12,
                               color: isDark

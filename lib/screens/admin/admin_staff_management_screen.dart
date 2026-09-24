@@ -580,7 +580,7 @@ class _AdminStaffManagementScreenState
                             _sectionLabel('3. Assigned Department', isDark),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<String>(
-                              value: selectedDept.isEmpty ? null : selectedDept,
+                              initialValue: selectedDept.isEmpty ? null : selectedDept,
                               hint: const Text('Select department…',
                                   style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
                               decoration: InputDecoration(
@@ -630,7 +630,7 @@ class _AdminStaffManagementScreenState
                                   });
                                 },
                               );
-                            }).toList(),
+                            }),
                           ],
                           const SizedBox(height: 24),
 

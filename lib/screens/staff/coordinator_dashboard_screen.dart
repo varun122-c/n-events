@@ -220,12 +220,37 @@ class _CoordinatorDashboardScreenState extends State<CoordinatorDashboardScreen>
             onSelected: (v) {
               if (v == 'export') {
                 _exportCSV(context, 'All Assigned Events', assignedRegs);
+              } else if (v == 'personal') {
+                authProvider.setPersonalAccountMode(true);
+                context.go('/student');
+              } else if (v == 'scanner') {
+                context.push('/staff/scanner');
               } else if (v == 'logout') {
                 authProvider.logout();
                 context.go('/auth');
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'personal',
+                child: Row(
+                  children: [
+                    Icon(Icons.person_rounded, color: Color(0xFF2563EB), size: 18),
+                    SizedBox(width: 8),
+                    Text('Shift to Personal Account'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'scanner',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF10B981), size: 18),
+                    SizedBox(width: 8),
+                    Text('Full Camera QR Scanner'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'export',
                 child: Row(

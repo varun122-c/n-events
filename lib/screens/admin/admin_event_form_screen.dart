@@ -34,6 +34,7 @@ class _AdminEventFormScreenState extends State<AdminEventFormScreen> {
   bool _showCustomUrlField = false;
 
   List<SubEvent> _subEvents = [];
+  List<ComboOffer> _comboOffers = [];
 
   final List<String> _categories = ['Technical', 'Cultural', 'Sports', 'Workshops'];
 
@@ -103,6 +104,7 @@ class _AdminEventFormScreenState extends State<AdminEventFormScreen> {
             _priceController.text = event.price == 0 ? '0' : event.price.toStringAsFixed(0);
             _selectedDateTime = event.dateTime;
             _subEvents = List.from(event.subEvents);
+            _comboOffers = List.from(event.comboOffers);
             if (_categories.contains(event.category)) {
               _selectedCategory = event.category;
             }
@@ -565,6 +567,311 @@ class _AdminEventFormScreenState extends State<AdminEventFormScreen> {
     );
   }
 
+  void _openComboOfferDialog([ComboOffer? existing, int? comboIndex]) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelCtrl = TextEditingController(text: existing?.label ?? '');
+    final descCtrl = TextEditingController(text: existing?.description ?? '');
+    final priceCtrl = TextEditingController(
+      text: existing != null && existing.comboPrice > 0
+          ? existing.comboPrice.toStringAsFixed(0)
+          : '',
+    );
+    // Which sub-event IDs are selected
+    final Set<String> selectedIds = existing != null ? Set.from(existing.subEventIds) : {};
+
+    if (_subEvents.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add at least 2 sub-events before creating a combo offer.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF18181B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheet) {
+            final isDark2 = Theme.of(context).brightness == Brightness.dark;
+
+            // Compute original total price of selected sub-events
+            final selectedSubs = _subEvents.where((s) => selectedIds.contains(s.id)).toList();
+            final originalTotal = selectedSubs.fold(0.0, (sum, s) => sum + s.price);
+            final comboPrice = double.tryParse(priceCtrl.text) ?? 0.0;
+            final saving = originalTotal - comboPrice;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                top: 20, left: 20, right: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(width: 40, height: 4,
+                        decoration: BoxDecoration(color: isDark2 ? const Color(0xFF3F3F46) : Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Header
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.local_offer_rounded, color: Color(0xFFF59E0B), size: 22),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                existing == null ? 'New Combo Offer' : 'Edit Combo Offer',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+                                    color: isDark2 ? Colors.white : const Color(0xFF0F172A)),
+                              ),
+                              Text('Bundle sub-events at a discounted price',
+                                  style: TextStyle(fontSize: 11, color: isDark2 ? Colors.white60 : const Color(0xFF64748B))),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Label
+                    TextField(
+                      controller: labelCtrl,
+                      style: TextStyle(color: isDark2 ? Colors.white : Colors.black),
+                      decoration: InputDecoration(
+                        labelText: 'Combo Label *',
+                        hintText: 'e.g. Tech Duo, All-Access Pass',
+                        prefixIcon: const Icon(Icons.label_rounded, color: Color(0xFFF59E0B)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Description
+                    TextField(
+                      controller: descCtrl,
+                      style: TextStyle(color: isDark2 ? Colors.white : Colors.black),
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: 'Short Description (optional)',
+                        hintText: 'e.g. Best value for tech enthusiasts',
+                        prefixIcon: const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Sub-events checklist
+                    Text('Select Sub-Events to include *',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                            color: isDark2 ? Colors.white70 : const Color(0xFF475569))),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: isDark2 ? const Color(0xFF3F3F46) : const Color(0xFFE2E8F0)),
+                        borderRadius: BorderRadius.circular(12),
+                        color: isDark2 ? const Color(0xFF27272A) : const Color(0xFFF8FAFC),
+                      ),
+                      child: Column(
+                        children: _subEvents.asMap().entries.map((entry) {
+                          final sub = entry.value;
+                          final isChecked = selectedIds.contains(sub.id);
+                          return CheckboxListTile(
+                            value: isChecked,
+                            title: Text(sub.title,
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                                    color: isDark2 ? Colors.white : const Color(0xFF0F172A))),
+                            subtitle: Text(
+                              sub.isFree ? 'Free' : '₹${sub.price.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.bold,
+                                color: sub.isFree ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                              ),
+                            ),
+                            secondary: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: sub.category == 'Technical'
+                                    ? const Color(0xFF2563EB).withValues(alpha: 0.12)
+                                    : const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(sub.category,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: sub.category == 'Technical' ? const Color(0xFF2563EB) : const Color(0xFF8B5CF6),
+                                    fontWeight: FontWeight.bold,
+                                  )),
+                            ),
+                            activeColor: const Color(0xFFF59E0B),
+                            onChanged: (val) {
+                              setSheet(() {
+                                if (val == true) {
+                                  selectedIds.add(sub.id);
+                                } else {
+                                  selectedIds.remove(sub.id);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Combo price
+                    TextField(
+                      controller: priceCtrl,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setSheet(() {}),
+                      style: TextStyle(color: isDark2 ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+                      decoration: InputDecoration(
+                        labelText: 'Combo Price (₹) *',
+                        hintText: 'Set a discounted bundle price',
+                        prefixIcon: const Icon(Icons.currency_rupee_rounded, color: Color(0xFFF59E0B)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+
+                    // Savings indicator
+                    if (selectedSubs.length >= 2 && originalTotal > 0 && comboPrice > 0) ...
+                      [
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: saving > 0
+                                ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                                : Colors.orange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: saving > 0 ? const Color(0xFF10B981) : Colors.orange,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                saving > 0 ? Icons.savings_rounded : Icons.warning_amber_rounded,
+                                color: saving > 0 ? const Color(0xFF10B981) : Colors.orange,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: saving > 0
+                                    ? Text(
+                                        'Save ₹${saving.toStringAsFixed(0)} vs. buying separately (₹${originalTotal.toStringAsFixed(0)})',
+                                        style: const TextStyle(
+                                          fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF047857),
+                                        ),
+                                      )
+                                    : Text(
+                                        'Combo price ≥ individual total (₹${originalTotal.toStringAsFixed(0)}). Consider a lower combo price.',
+                                        style: const TextStyle(fontSize: 12, color: Colors.orange),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                    const SizedBox(height: 20),
+
+                    // Save / Cancel
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              if (labelCtrl.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Enter a combo label.'), backgroundColor: Colors.red),
+                                );
+                                return;
+                              }
+                              if (selectedIds.length < 2) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Select at least 2 sub-events.'), backgroundColor: Colors.orange),
+                                );
+                                return;
+                              }
+                              if ((double.tryParse(priceCtrl.text) ?? -1) < 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Enter a valid combo price.'), backgroundColor: Colors.red),
+                                );
+                                return;
+                              }
+                              final offer = ComboOffer(
+                                id: existing?.id ?? const Uuid().v4(),
+                                label: labelCtrl.text.trim(),
+                                description: descCtrl.text.trim(),
+                                subEventIds: selectedIds.toList(),
+                                comboPrice: double.tryParse(priceCtrl.text.trim()) ?? 0.0,
+                              );
+                              setState(() {
+                                if (comboIndex != null) {
+                                  _comboOffers[comboIndex] = offer;
+                                } else {
+                                  _comboOffers.add(offer);
+                                }
+                              });
+                              Navigator.pop(ctx);
+                            },
+                            icon: const Icon(Icons.local_offer_rounded, size: 16, color: Colors.white),
+                            label: Text(
+                              existing == null ? 'Create Combo Offer' : 'Save Changes',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF59E0B),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _saveEvent() {
     if (_formKey.currentState!.validate()) {
       final stateProvider = Provider.of<AppStateProvider>(context, listen: false);
@@ -590,6 +897,7 @@ class _AdminEventFormScreenState extends State<AdminEventFormScreen> {
         maxSeats: int.tryParse(_maxSeatsController.text.trim()) ?? 100,
         price: double.tryParse(_priceController.text.trim()) ?? 0.0,
         subEvents: _subEvents,
+        comboOffers: _comboOffers,
       );
 
       if (isEditMode) {
@@ -731,7 +1039,7 @@ class _AdminEventFormScreenState extends State<AdminEventFormScreen> {
                           Expanded(
                             flex: 3,
                             child: DropdownButtonFormField<String>(
-                              value: _selectedCategory,
+                              initialValue: _selectedCategory,
                               dropdownColor: isDark ? const Color(0xFF27272A) : Colors.white,
                               style: TextStyle(color: isDark ? Colors.white : Colors.black),
                               decoration: InputDecoration(
@@ -1189,6 +1497,210 @@ class _AdminEventFormScreenState extends State<AdminEventFormScreen> {
                                       });
                                     },
                                   ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Combo Offers Card ─────────────────────────────────────────
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: isDark ? const Color(0xFF27272A) : const Color(0xFFE2E8F0)),
+                ),
+                color: isDark ? const Color(0xFF18181B) : Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.local_offer_rounded, color: Color(0xFFF59E0B), size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Combo Offers (${_comboOffers.length})',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => _openComboOfferDialog(),
+                            icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                            label: const Text('Add Combo', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF59E0B),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _subEvents.length < 2
+                            ? '⚠ Add at least 2 sub-events to create combo offers'
+                            : 'Bundle multiple sub-events at a discounted price',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _subEvents.length < 2
+                              ? Colors.orange
+                              : (isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (_comboOffers.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF27272A) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              style: BorderStyle.solid,
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(Icons.local_offer_outlined, color: isDark ? Colors.grey : const Color(0xFF94A3B8), size: 32),
+                              const SizedBox(height: 6),
+                              Text(
+                                'No Combo Offers yet',
+                                style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600,
+                                  color: isDark ? const Color(0xFFA1A1AA) : const Color(0xFF64748B),
+                                ),
+                              ),
+                              Text(
+                                'Create bundles to offer discounted registration for multiple sub-events',
+                                style: TextStyle(fontSize: 11, color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8)),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _comboOffers.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 10),
+                          itemBuilder: (context, idx) {
+                            final combo = _comboOffers[idx];
+                            final includedSubs = _subEvents.where((s) => combo.subEventIds.contains(s.id)).toList();
+                            final originalTotal = includedSubs.fold(0.0, (sum, s) => sum + s.price);
+                            final saving = originalTotal - combo.comboPrice;
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF27272A) : const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(Icons.local_offer_rounded, color: Color(0xFFF59E0B), size: 16),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              combo.label,
+                                              style: TextStyle(
+                                                fontSize: 14, fontWeight: FontWeight.bold,
+                                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                            if (combo.description.isNotEmpty)
+                                              Text(
+                                                combo.description,
+                                                style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Combo price badge
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF59E0B),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          combo.isFree ? 'FREE' : '₹${combo.comboPrice.toStringAsFixed(0)}',
+                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFFF59E0B)),
+                                        onPressed: () => _openComboOfferDialog(combo, idx),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
+                                        onPressed: () => setState(() => _comboOffers.removeAt(idx)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Included sub-events chips
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: includedSubs.map((s) => Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF3F3F46) : const Color(0xFFE2E8F0),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${s.title} ${s.isFree ? "(Free)" : "(₹${s.price.toStringAsFixed(0)})"}',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                                            color: isDark ? Colors.white70 : const Color(0xFF475569)),
+                                      ),
+                                    )).toList(),
+                                  ),
+                                  if (saving > 0) ...[
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.savings_rounded, size: 13, color: Color(0xFF10B981)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Saves ₹${saving.toStringAsFixed(0)} vs. buying separately (₹${originalTotal.toStringAsFixed(0)})',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
                             );

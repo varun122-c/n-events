@@ -4,10 +4,21 @@ import 'providers/auth_provider.dart';
 import 'providers/app_state_provider.dart';
 import 'router/app_router.dart';
 import 'services/supabase_service.dart';
+import 'services/sender_email_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SupabaseService.initialize();
+  await SenderEmailService.init();
+  try {
+    await SupabaseService.initialize().timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {
+        debugPrint('Supabase init timeout on startup, proceeding with offline mode...');
+      },
+    );
+  } catch (e) {
+    debugPrint('Supabase init error on startup: $e');
+  }
   runApp(const MyApp());
 }
 

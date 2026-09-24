@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/event_model.dart';
+import '../../services/razorpay_service.dart';
 import '../../widgets/confetti_particles.dart';
 import '../../widgets/universal_image.dart';
 import '../../config/departments.dart';
@@ -20,23 +22,18 @@ class EventDetailsScreen extends StatefulWidget {
 class _EventDetailsScreenState extends State<EventDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _showConfetti = false;
-  
+  bool _isProcessingPayment = false;
+  Event? _pendingPaymentEvent; // Held during Razorpay checkout
+
   late TextEditingController _nameController;
   late TextEditingController _rollController;
   late TextEditingController _phoneController;
   
   String _selectedDept = AitsDepartments.defaultDepartment;
-  String _selectedYear = '1st Year';
 
   final List<String> _departments = AitsDepartments.allDepartments;
 
-  final List<String> _years = [
-    '1st Year',
-    '2nd Year',
-    '3rd Year',
-    '4th Year',
-    'Post Graduate',
-  ];
+
 
   @override
   void initState() {
@@ -45,13 +42,17 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     _nameController = TextEditingController(text: authProvider.studentName);
     _rollController = TextEditingController(text: authProvider.studentRoll);
     _phoneController = TextEditingController(text: authProvider.studentPhone);
-    
+
     if (authProvider.studentDept.isNotEmpty && _departments.contains(authProvider.studentDept)) {
       _selectedDept = authProvider.studentDept;
     }
-    if (authProvider.studentYear.isNotEmpty && _years.contains(authProvider.studentYear)) {
-      _selectedYear = authProvider.studentYear;
-    }
+
+
+    // Initialise Razorpay
+    RazorpayService.init(
+      onPaymentSuccess: _onPaymentSuccess,
+      onPaymentFailure: _onPaymentFailure,
+    );
   }
 
   @override
@@ -59,7 +60,95 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     _nameController.dispose();
     _rollController.dispose();
     _phoneController.dispose();
+    RazorpayService.dispose();
     super.dispose();
+  }
+
+  // ── Razorpay callbacks ─────────────────────────────────────────────────
+
+  void _onPaymentSuccess(PaymentSuccessResponse response) async {
+    if (!mounted || _pendingPaymentEvent == null) return;
+    final event = _pendingPaymentEvent!;
+    final paymentId = response.paymentId ?? 'RZP-UNKNOWN';
+
+    final stateProvider = Provider.of<AppStateProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    final roll = authProvider.studentRoll.isNotEmpty ? authProvider.studentRoll : authProvider.participantCode;
+    final dept = authProvider.studentDept.isNotEmpty ? authProvider.studentDept : 'General';
+    final year = authProvider.studentYear.isNotEmpty ? authProvider.studentYear : 'Current Year';
+    final phone = authProvider.studentPhone.isNotEmpty ? authProvider.studentPhone : '';
+    final college = authProvider.studentCollege;
+
+    final success = await stateProvider.registerForEvent(
+      eventId: event.id,
+      fullName: _nameController.text.trim(),
+      rollNumber: roll,
+      department: dept,
+      college: college,
+      yearOfStudy: year,
+      phoneNumber: phone,
+    );
+
+    // Mark registration as paid with the Razorpay payment ID
+    if (success) {
+      final reg = stateProvider.registrations.lastWhere(
+        (r) => r.eventId == event.id && r.rollNumber == roll,
+        orElse: () => stateProvider.registrations.last,
+      );
+      await stateProvider.updatePaymentStatus(
+        reg.id,
+        isPaid: true,
+        paymentNote: paymentId,
+      );
+    }
+
+    setState(() {
+      _isProcessingPayment = false;
+      _pendingPaymentEvent = null;
+      if (success) _showConfetti = true;
+    });
+
+    if (!mounted) return;
+    if (success) {
+      _showTicketDialog(event);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment successful! ID: $paymentId ✓'),
+          backgroundColor: const Color(0xFF10B981),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment received but registration failed. Contact support.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  void _onPaymentFailure(PaymentFailureResponse response) {
+    if (!mounted) return;
+    setState(() {
+      _isProcessingPayment = false;
+      _pendingPaymentEvent = null;
+    });
+    final msg = response.message ?? 'Payment was cancelled or failed.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Payment failed: $msg')),
+          ],
+        ),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   void _showRegistrationSheet(BuildContext context, Event event) {
@@ -200,25 +289,71 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                       ),
                       const SizedBox(height: 20),
 
+                      // Price summary bar
+                      if (!event.isFree)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFF59E0B)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.currency_rupee_rounded, color: Color(0xFFF59E0B), size: 18),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Registration Fee: ₹${event.price.toStringAsFixed(0)}',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E3C72),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text('Razorpay', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ),
+
                       SizedBox(
                         width: double.infinity,
                         height: 52,
-                        child: ElevatedButton(
-                          onPressed: () => _submitRegistration(context, event),
+                        child: ElevatedButton.icon(
+                          onPressed: _isProcessingPayment
+                              ? null
+                              : () => _submitRegistration(context, event),
+                          icon: _isProcessingPayment
+                              ? const SizedBox(
+                                  width: 18, height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : Icon(
+                                  event.isFree ? Icons.how_to_reg_rounded : Icons.payment_rounded,
+                                  size: 18,
+                                ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isDark ? const Color(0xFF2563EB) : const Color(0xFF1E3C72),
+                            backgroundColor: event.isFree
+                                ? (isDark ? const Color(0xFF2563EB) : const Color(0xFF1E3C72))
+                                : const Color(0xFFF59E0B),
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: Builder(
+                          label: Builder(
                             builder: (context) {
                               final pCode = Provider.of<AuthProvider>(context, listen: false).participantCode;
                               return FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Text(
-                                  'Confirm Registration with ID: $pCode',
+                                  event.isFree
+                                      ? 'Confirm Registration with ID: $pCode'
+                                      : 'Pay ₹${event.price.toStringAsFixed(0)} & Register',
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                 ),
                               );
@@ -239,67 +374,75 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 
   void _submitRegistration(BuildContext context, Event event) async {
-    if (_formKey.currentState!.validate()) {
-      final stateProvider = Provider.of<AppStateProvider>(context, listen: false);
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (!_formKey.currentState!.validate()) return;
 
-      final name = _nameController.text.trim();
-      final pCode = authProvider.participantCode;
-      final roll = authProvider.studentRoll.isNotEmpty ? authProvider.studentRoll : pCode;
-      final dept = authProvider.studentDept.isNotEmpty ? authProvider.studentDept : 'General';
-      final year = authProvider.studentYear.isNotEmpty ? authProvider.studentYear : 'Current Year';
-      final phone = authProvider.studentPhone.isNotEmpty ? authProvider.studentPhone : '1234567890';
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final name = _nameController.text.trim();
+    final roll = authProvider.studentRoll.isNotEmpty ? authProvider.studentRoll : authProvider.participantCode;
+    final dept = authProvider.studentDept.isNotEmpty ? authProvider.studentDept : 'General';
+    final year = authProvider.studentYear.isNotEmpty ? authProvider.studentYear : 'Current Year';
+    final phone = authProvider.studentPhone.isNotEmpty ? authProvider.studentPhone : '';
+    final email = authProvider.currentUser?.email ?? '';
 
-      final college = authProvider.studentCollege;
+    final navigator = Navigator.of(context);
+    final stateProvider = Provider.of<AppStateProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
 
-      final success = await stateProvider.registerForEvent(
-        eventId: event.id,
-        fullName: name,
-        rollNumber: roll,
-        department: dept,
-        college: college,
-        yearOfStudy: year,
-        phoneNumber: phone,
+    // Save profile if not yet saved
+    if (authProvider.studentName != name || authProvider.studentRoll.isEmpty) {
+      await authProvider.updateProfile(
+        name: name,
+        roll: authProvider.studentRoll.isNotEmpty ? authProvider.studentRoll : _rollController.text.trim().toUpperCase(),
+        dept: dept,
+        year: year,
+        phone: phone,
       );
+    }
 
-      // Save student name if changed
-      if (authProvider.studentName != name) {
-        await authProvider.updateProfile(
-          name: name,
-          roll: roll,
-          dept: dept,
-          year: year,
-          phone: phone,
-        );
-      }
+    // ── PAID EVENT: open Razorpay ─────────────────────────────────────
+    if (!event.isFree) {
+      // Store event context for success callback
+      setState(() {
+        _isProcessingPayment = true;
+        _pendingPaymentEvent = event;
+      });
+      navigator.pop(); // close bottom sheet before Razorpay opens
 
-      // Save student credentials to local profile automatically if not set yet!
-      if (authProvider.studentRoll.isEmpty) {
-        await authProvider.updateProfile(
-          name: _nameController.text.trim(),
-          roll: _rollController.text.trim().toUpperCase(),
-          dept: _selectedDept,
-          year: _selectedYear,
-          phone: _phoneController.text.trim(),
-        );
-      }
+      RazorpayService.launchPayment(
+        amountInRupees: event.price,
+        eventTitle: event.title,
+        studentName: name,
+        email: email,
+        phone: phone,
+        description: '${event.title} — Registration Fee',
+      );
+      return;
+    }
 
-      if (!mounted) return;
-      Navigator.pop(context); // Close Bottom Sheet
+    // ── FREE EVENT: register immediately ─────────────────────────────────
+    final success = await stateProvider.registerForEvent(
+      eventId: event.id,
+      fullName: name,
+      rollNumber: roll,
+      department: dept,
+      college: authProvider.studentCollege,
+      yearOfStudy: year,
+      phoneNumber: phone,
+    );
 
-      if (success) {
-        setState(() {
-          _showConfetti = true;
-        });
-        _showTicketDialog(event);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You are already registered for this event!'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
+    if (!mounted) return;
+    navigator.pop(); // Close bottom sheet
+
+    if (success) {
+      setState(() => _showConfetti = true);
+      _showTicketDialog(event);
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('You are already registered for this event!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
@@ -317,7 +460,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             border: isDark ? Border.all(color: const Color(0xFF27272A)) : null,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 20,
                 spreadRadius: 2,
               )
@@ -721,7 +864,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             height: 250,
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [Colors.black.withOpacity(0.6), Colors.transparent],
+                                colors: [Colors.black.withValues(alpha: 0.6), Colors.transparent],
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                               ),
@@ -731,7 +874,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             top: MediaQuery.of(context).padding.top + 8,
                             left: 16,
                             child: CircleAvatar(
-                              backgroundColor: isDark ? const Color(0xFF18181B) : Colors.white.withOpacity(0.9),
+                              backgroundColor: isDark ? const Color(0xFF18181B) : Colors.white.withValues(alpha: 0.9),
                               child: IconButton(
                                 icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : const Color(0xFF1E293B)),
                                 onPressed: () => Navigator.pop(context),
@@ -1113,7 +1256,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                       border: Border(top: BorderSide(color: isDark ? const Color(0xFF27272A) : const Color(0xFFE2E8F0))),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 10,
                           spreadRadius: 0,
                           offset: const Offset(0, -4),

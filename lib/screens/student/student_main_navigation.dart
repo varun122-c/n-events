@@ -64,8 +64,8 @@ class _StudentMainNavigationState extends State<StudentMainNavigation> {
     final authProvider = Provider.of<AuthProvider>(context);
     final notifsCount = stateProvider.notifications.length;
 
-    // Auto-redirect if admin granted staff/coordinator subRole!
-    if (authProvider.subRole.isNotEmpty) {
+    // Auto-redirect if admin granted staff/coordinator subRole (unless in Personal Account mode!)
+    if (authProvider.subRole.isNotEmpty && !authProvider.isPersonalAccountMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           final targetRoute = authProvider.homeRoute;

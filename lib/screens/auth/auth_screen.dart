@@ -9,10 +9,11 @@ import '../../widgets/google_logo.dart';
 import '../../widgets/top_notification.dart';
 import '../../config/departments.dart';
 import '../../config/colleges.dart';
+import '../../services/telecom_helper.dart';
 
 enum SignUpStep {
   credentials,
-  otpVerification,
+  phoneVerification,
   profileDetails,
 }
 
@@ -46,6 +47,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   // Sign Up Multi-Step Controllers & State
   SignUpStep _signUpStep = SignUpStep.credentials;
   bool _isGoogleOnboarding = false;
+  bool _isEmailOtpSent = false;
 
   // Generated OTP Codes & 30-second Resend Countdown
   String _generatedEmailOtp = '849201';
@@ -60,6 +62,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
 
   final _signUpEmailController = TextEditingController();
   final _signUpPhoneController = TextEditingController();
+  final _signUpPhoneFocusNode = FocusNode();
   final _signUpPasswordController = TextEditingController();
   final _signUpConfirmPasswordController = TextEditingController();
 
@@ -161,8 +164,15 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           _generatedEmailOtp = 'GOOGLE';
           _generatedPhoneOtp = phoneCode;
           _isPhoneVerified = false;
-          _signUpStep = SignUpStep.otpVerification;
+          _signUpStep = SignUpStep.phoneVerification;
           _tabController.animateTo(1);
+        });
+
+        // Automatically trigger 1-Tap SIM hint modal sheet on Google Sign-In redirect
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && !_isPhoneVerified && _signUpStep == SignUpStep.phoneVerification) {
+            _showDevicePhoneHintSheet();
+          }
         });
       }
     });
@@ -177,6 +187,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
 
     _signUpEmailController.dispose();
     _signUpPhoneController.dispose();
+    _signUpPhoneFocusNode.dispose();
     _signUpPasswordController.removeListener(_updatePasswordStrength);
     _signUpPasswordController.dispose();
     _signUpConfirmPasswordController.dispose();
@@ -280,8 +291,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
   }
 
-  // Step 1 -> Step 2: Send Separate Email & Phone OTP
-  void _handleSendOtp() {
+  // Step 1: Send Email OTP
+  void _handleSendEmailOtp() {
     if (!_signUpCredentialsFormKey.currentState!.validate()) return;
 
     if (!_agreeToTerms) {
@@ -293,46 +304,26 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       return;
     }
 
-    // Generate separate 6-digit OTP codes for Email & Phone
+    // Generate 6-digit Email OTP
     final emailCode = (100000 + math.Random().nextInt(900000)).toString();
-    final phoneCode = (100000 + math.Random().nextInt(900000)).toString();
 
     setState(() {
       _generatedEmailOtp = emailCode;
-      _generatedPhoneOtp = phoneCode;
       _isEmailVerified = false;
-      _isPhoneVerified = false;
+      _isEmailOtpSent = true;
       _emailOtpController.clear();
-      _phoneOtpController.clear();
-      _signUpStep = SignUpStep.otpVerification;
     });
 
     _startResendTimer();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Verification codes sent separately!',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            const SizedBox(height: 2),
-            Text('• Email OTP (${_signUpEmailController.text}): $emailCode'),
-            Text('• Phone OTP (+91 ${_signUpPhoneController.text}): $phoneCode'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF2563EB),
-        duration: const Duration(seconds: 10),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    TopNotification.showSuccess(
+      context,
+      'Email OTP Sent: $emailCode\nEnter this code below to verify your email address.',
+      title: 'Email Verification Code Sent 📩',
     );
   }
 
-  // Verify Email OTP separately
+  // Verify Email OTP -> Advance to Step 2 (Mobile Phone Number Page)
   void _handleVerifyEmailOtp() {
     final code = _emailOtpController.text.trim();
     if (code.isEmpty) {
@@ -351,16 +342,19 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
 
     TopNotification.showSuccess(context, 'Email Address verified successfully! ✓');
 
-    if (_isPhoneVerified) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && _signUpStep == SignUpStep.otpVerification) {
-          _handleProceedToProfile();
-        }
-      });
-    }
+    // Automatically transition to Step 2: Mobile Phone Number Page
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) {
+        final phoneCode = (100000 + math.Random().nextInt(900000)).toString();
+        setState(() {
+          _generatedPhoneOtp = phoneCode;
+          _signUpStep = SignUpStep.phoneVerification;
+        });
+      }
+    });
   }
 
-  // Verify Phone OTP separately
+  // Verify Phone OTP -> Advance to Step 3 (Campus Profile Details)
   void _handleVerifyPhoneOtp() {
     final phone = _signUpPhoneController.text.trim();
     if (phone.length != 10 || !RegExp(r'^[0-9]{10}$').hasMatch(phone)) {
@@ -383,18 +377,378 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       _isPhoneVerified = true;
     });
 
-    TopNotification.showSuccess(context, 'Mobile Phone Number Auto-Verified Successfully! ✓');
+    TopNotification.showSuccess(context, 'Mobile Phone Number Verified Successfully! ✓');
 
-    if (_isEmailVerified) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && _signUpStep == SignUpStep.otpVerification) {
-          _handleProceedToProfile();
+    final isDetailsComplete = _signUpNameController.text.trim().isNotEmpty &&
+        _signUpRollController.text.trim().isNotEmpty &&
+        !_signUpRollController.text.trim().startsWith('GGL-') &&
+        _signUpDept.isNotEmpty &&
+        _signUpCollege.isNotEmpty &&
+        _signUpYear.isNotEmpty;
+
+    if (isDetailsComplete) {
+      // Profile details are already filled -> finish login and land on Home Page!
+      _handleCompleteRegistration();
+    } else {
+      // Profile details missing -> transition to Step 3: Campus Profile Details page
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (mounted) {
+          setState(() {
+            _signUpStep = SignUpStep.profileDetails;
+          });
         }
       });
     }
   }
 
-  // Step 2 -> Step 3: Advance once both Email & Phone are verified
+  void _promptManualSimNumber(String carrierName) {
+    final textController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF18181B) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.sim_card_rounded, color: Color(0xFF2563EB), size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Auto-Print SIM Number',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Selected SIM: $carrierName',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2563EB),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enter your 10-digit mobile number to auto-print it into the phone number field:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: textController,
+                keyboardType: TextInputType.phone,
+                autofocus: true,
+                maxLength: 10,
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(10),
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  letterSpacing: 1.5,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Enter 10-digit mobile number',
+                  prefixText: '+91 ',
+                  prefixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                  counterText: '',
+                  filled: true,
+                  fillColor: isDark ? const Color(0xFF27272A) : const Color(0xFFF1F5F9),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final digits = textController.text.trim();
+                if (digits.length >= 10) {
+                  Navigator.pop(dialogContext);
+                  final real10 = digits.substring(digits.length - 10);
+                  _autoVerifyPhoneWithNumber(real10);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid 10-digit mobile number.'),
+                      backgroundColor: Color(0xFFEF4444),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Auto-Print Number ⚡', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDevicePhoneHintSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF18181B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF52525B) : const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.sim_card_rounded, color: Color(0xFF2563EB), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Choose Phone Number',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          'Select SIM phone number to auto-verify instantly',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // DYNAMIC REAL HARDWARE DEVICE SIM QUERY
+              FutureBuilder<List<TelecomOperator>>(
+                future: TelecomHelper.getHardwareSimCards(),
+                builder: (context, snapshot) {
+                  final hardwareSims = snapshot.data ?? [];
+                  if (hardwareSims.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text(
+                          'No hardware SIM detected. Please enter your mobile number manually.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: hardwareSims.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final sim = entry.value;
+                      final cleanNum = sim.realPhoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+                      final displayNum = cleanNum.isNotEmpty ? cleanNum : 'Inserted Hardware SIM';
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _buildSimOptionTile(
+                          simLabel: 'Physical SIM Slot ${idx + 1}',
+                          phoneNumber: displayNum,
+                          carrier: sim.name,
+                          isDark: isDark,
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            if (cleanNum.length >= 10) {
+                              final real10 = cleanNum.substring(cleanNum.length - 10);
+                              _autoVerifyPhoneWithNumber(real10);
+                            } else {
+                              _signUpPhoneFocusNode.requestFocus();
+                              TextInput.finishAutofillContext(shouldSave: false);
+                              _promptManualSimNumber(sim.name);
+                            }
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  child: Text(
+                    'None of the above (Enter manually)',
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSimOptionTile({
+    required String simLabel,
+    required String phoneNumber,
+    required String carrier,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF27272A) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark ? const Color(0xFF3F3F46) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.phone_android_rounded, color: Color(0xFF10B981), size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          simLabel,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? const Color(0xFFA1A1AA) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '• $carrier',
+                        style: const TextStyle(fontSize: 10, color: Color(0xFF10B981), fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    phoneNumber,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                '1-Tap Verify',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF10B981),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _autoVerifyPhoneWithNumber(String digits) {
+    setState(() {
+      _signUpPhoneController.text = digits;
+      _phoneOtpController.text = _generatedPhoneOtp;
+      _isPhoneVerified = true;
+    });
+
+    TopNotification.showSuccess(
+      context,
+      'Mobile Phone ($digits) printed in Phone field ⚡',
+      title: 'SIM Number Auto-Printed ✓',
+    );
+  }
+
+
+  // Advance from Phone Verification to Campus Details
   void _handleProceedToProfile() {
     if (!_isEmailVerified || !_isPhoneVerified) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -415,6 +769,17 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
 
   // Final Step: Complete Account Setup
   Future<void> _handleCompleteRegistration() async {
+    // Strict verification check: BOTH Email and Phone must be verified
+    if (!_isEmailVerified || !_isPhoneVerified) {
+      TopNotification.showError(
+        context,
+        'Registration blocked: You must verify BOTH Email and Mobile Phone Number before creating an account!',
+        title: 'Verification Required ⚠️',
+      );
+      setState(() => _signUpStep = _isEmailVerified ? SignUpStep.phoneVerification : SignUpStep.credentials);
+      return;
+    }
+
     if (!_signUpProfileFormKey.currentState!.validate()) return;
 
     if (_signUpDobController.text.isEmpty) {
@@ -440,12 +805,12 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         : _signUpCollege;
 
     String? error;
-    if (_isGoogleOnboarding && authProvider.currentUser != null) {
-      // Update existing Google session profile
-      await authProvider.updateProfile(
+    if (_isGoogleOnboarding && authProvider.pendingGoogleUser != null) {
+      // Complete profile for pending Google session
+      error = await authProvider.completeGoogleOnboarding(
         name: _signUpNameController.text.trim(),
-        roll: _signUpRollController.text.trim().toUpperCase(),
-        dept: _signUpDept,
+        rollNumber: _signUpRollController.text.trim().toUpperCase(),
+        department: _signUpDept,
         college: effectiveCollege,
         year: _signUpYear,
         phone: _signUpPhoneController.text.trim(),
@@ -512,21 +877,30 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   Future<void> _handleGoogleSignIn() async {
     setState(() => _isLoadingGoogle = true);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final error = await authProvider.signInWithGoogle(role: _signUpRole);
+    final result = await authProvider.signInWithGoogle(role: _signUpRole);
 
     if (!mounted) return;
     setState(() => _isLoadingGoogle = false);
 
-    if (error == null) {
-      if (authProvider.role == 'admin') {
-        context.go(authProvider.homeRoute);
-        return;
-      }
+    if (result == 'CANCELLED') {
+      // User cancelled account chooser or backed out -> stay cleanly on current screen
+      return;
+    }
+
+    if (result == null) {
+      // Existing verified Google user -> land on home route
+      context.go(authProvider.homeRoute);
+      return;
+    }
+
+    if (result == 'NEED_ONBOARDING') {
       // Pre-fill profile fields from Google user
-      final user = authProvider.currentUser;
+      final user = authProvider.pendingGoogleUser;
       if (user != null) {
         _signUpNameController.text = user.name;
         _signUpEmailController.text = user.email;
+        _signUpPasswordController.text = 'GoogleAuth#2026';
+        _signUpConfirmPasswordController.text = 'GoogleAuth#2026';
         _isEmailVerified = true; // Email authenticated via Google
         
         if (user.phone.isNotEmpty && user.phone.length >= 10) {
@@ -555,40 +929,45 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         _generatedPhoneOtp = phoneCode;
         _generatedEmailOtp = 'GOOGLE';
         _phoneOtpController.clear();
+        _signUpStep = SignUpStep.phoneVerification; // Open Step 2: Mobile Phone Number Page directly!
+        _tabController.animateTo(1); // Auto-redirect to Sign Up tab
+      });
 
-        // Enforce Phone Number OTP Verification for Google users
-        if (!_isPhoneVerified) {
-          _signUpStep = SignUpStep.otpVerification;
-        } else {
-          _signUpStep = SignUpStep.profileDetails;
+      // Automatically trigger 1-Tap Device SIM Hint bottom sheet after Google Account selection
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && !_isPhoneVerified && _signUpStep == SignUpStep.phoneVerification) {
+          _showDevicePhoneHintSheet();
         }
-        _tabController.animateTo(1); // Switch to Sign Up tab
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Column(
+          content: const Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.g_mobiledata_rounded, color: Colors.white, size: 24),
-                  SizedBox(width: 8),
-                  Text('Google Account Authenticated!', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Icon(Icons.g_mobiledata_rounded, color: Colors.white, size: 26),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Google Email Verified! Redirected to Sign Up',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
               Text(
-                _isPhoneVerified
-                    ? 'Email & Phone verified. Complete campus details below.'
-                    : 'Please enter & verify your mobile phone number with OTP code: $phoneCode',
-                style: const TextStyle(fontSize: 12),
+                'No existing account found. Please enter your mobile phone & student details below to complete registration.',
+                style: TextStyle(fontSize: 12),
               ),
             ],
           ),
           backgroundColor: const Color(0xFF2563EB),
-          duration: const Duration(seconds: 10),
+          duration: const Duration(seconds: 7),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
@@ -600,7 +979,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             children: [
               const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
               const SizedBox(width: 10),
-              Expanded(child: Text(error)),
+              Expanded(child: Text(result)),
             ],
           ),
           backgroundColor: const Color(0xFFEF4444),
@@ -742,7 +1121,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                           });
                         },
                         icon: const Icon(Icons.mark_email_read_rounded, size: 14),
-                        label: Text('Demo Email OTP: $_generatedForgotOtp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        label: Text('Auto-fill Email OTP: $_generatedForgotOtp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF2563EB),
                           backgroundColor: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.3) : const Color(0xFFEFF6FF),
@@ -1303,19 +1682,19 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
   }
 
-  // SIGN UP TAB (Multi-Step Flow: 1. Credentials -> 2. Separate OTPs -> 3. Campus Details with Locked Info)
+  // SIGN UP TAB (Multi-Step Flow: 1. Auth Choice -> 2. Phone Verification -> 3. Campus Profile Details)
   Widget _buildSignUpTab() {
     switch (_signUpStep) {
       case SignUpStep.credentials:
         return _buildSignUpCredentialsStep();
-      case SignUpStep.otpVerification:
-        return _buildSignUpOtpStep();
+      case SignUpStep.phoneVerification:
+        return _buildSignUpPhoneStep();
       case SignUpStep.profileDetails:
         return _buildSignUpProfileStep();
     }
   }
 
-  // STEP 1: Enter Email, Phone (10 Digits Only), and Create Password
+  // STEP 1: Choose Auth Method (Google OAuth OR Email Sign Up)
   Widget _buildSignUpCredentialsStep() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return SingleChildScrollView(
@@ -1341,7 +1720,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text('Account Credentials', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
+                Text('Choose Auth Method', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
               ],
             ),
             const SizedBox(height: 12),
@@ -1355,18 +1734,57 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             ),
             const SizedBox(height: 4),
             Text(
-              'Enter your email, 10-digit mobile number, and set a password',
+              'Select Google OAuth or Enter Email & Password to get started',
               style: TextStyle(
                 fontSize: 13,
                 color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
               ),
             ),
+            const SizedBox(height: 18),
+
+            // OPTION 1: Google OAuth (Fastest & Easiest)
+            Text(
+              'OPTION 1: ONE-TAP AUTHENTICATION',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildGoogleSignInButton(
+              label: 'Continue with Google Account 🚀',
+              onPressed: _handleGoogleSignIn,
+            ),
             const SizedBox(height: 20),
+
+            // Divider Line
+            Row(
+              children: [
+                const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'OR OPTION 2: EMAIL & PASSWORD',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF94A3B8),
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+              ],
+            ),
+            const SizedBox(height: 18),
 
             // Email Address
             TextFormField(
               controller: _signUpEmailController,
               keyboardType: TextInputType.emailAddress,
+              enabled: !_isEmailVerified,
               style: _inputTextStyle,
               decoration: _buildInputDecoration(
                 hintText: 'Email Address (e.g. name@gmail.com)',
@@ -1380,34 +1798,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             ),
             const SizedBox(height: 14),
 
-            // Mobile Phone Number (Strict 10 Digits Only)
-            TextFormField(
-              controller: _signUpPhoneController,
-              keyboardType: TextInputType.phone,
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(10),
-                FilteringTextInputFormatter.digitsOnly,
-              ],
-              style: _inputTextStyle,
-              decoration: _buildInputDecoration(
-                hintText: 'Mobile Phone Number (10 digits only)',
-                prefixIcon: Icons.phone_outlined,
-              ),
-              validator: (val) {
-                if (val == null || val.trim().isEmpty) return 'Phone number is required';
-                final clean = val.trim();
-                if (clean.length != 10 || !RegExp(r'^[0-9]{10}$').hasMatch(clean)) {
-                  return 'Phone number must be exactly 10 digits';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-
             // Create Password
             TextFormField(
               controller: _signUpPasswordController,
               obscureText: _obscureSignUpPassword,
+              enabled: !_isEmailVerified,
               style: _inputTextStyle,
               decoration: _buildInputDecoration(
                 hintText: 'Create Password',
@@ -1462,6 +1857,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             TextFormField(
               controller: _signUpConfirmPasswordController,
               obscureText: _obscureSignUpConfirmPassword,
+              enabled: !_isEmailVerified,
               style: _inputTextStyle,
               decoration: _buildInputDecoration(
                 hintText: 'Confirm Password',
@@ -1508,70 +1904,131 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                 ),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
 
-            // Next Step Button: Send OTPs
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _handleSendOtp,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  shadowColor: const Color(0xFF2563EB).withValues(alpha: 0.3),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+            // IF EMAIL OTP SENT: SHOW EMAIL OTP VERIFICATION CARD
+            if (_isEmailOtpSent && !_isEmailVerified) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.2) : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE)),
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Send Verification Codes (Email & Phone)',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                    Row(
+                      children: [
+                        const Icon(Icons.mark_email_read_rounded, size: 18, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Email OTP Code Sent to ${_signUpEmailController.text}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _emailOtpController.text = _generatedEmailOtp;
+                        });
+                      },
+                      icon: const Icon(Icons.mark_email_read_rounded, size: 14),
+                      label: Text('Auto-fill Email OTP: $_generatedEmailOtp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF2563EB),
+                        backgroundColor: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.3) : const Color(0xFFEFF6FF),
+                        side: BorderSide(color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
-                    SizedBox(width: 6),
-                    Icon(Icons.arrow_forward_rounded, size: 18),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 44,
+                            child: TextFormField(
+                              controller: _emailOtpController,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              textAlign: TextAlign.center,
+                              style: _otpTextStyle,
+                              onChanged: (val) {
+                                if (val.trim().length == 6) {
+                                  _handleVerifyEmailOtp();
+                                }
+                              },
+                              decoration: InputDecoration(
+                                hintText: '• • • • • •',
+                                hintStyle: TextStyle(fontSize: 16, letterSpacing: 4, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1)),
+                                counterText: '',
+                                filled: true,
+                                fillColor: isDark ? Colors.black : Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          onPressed: _handleVerifyEmailOtp,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                          child: const Text('Verify Email', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-
-            // Divider Line
-            Row(
-              children: [
-                const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'OR SIGN UP WITH',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF94A3B8),
-                      letterSpacing: 1.0,
+              const SizedBox(height: 16),
+            ] else if (!_isEmailVerified) ...[
+              // Primary Button: Send Email OTP & Continue
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _handleSendEmailOtp,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    shadowColor: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Verify Email & Continue',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 6),
+                      Icon(Icons.arrow_forward_rounded, size: 18),
+                    ],
+                  ),
                 ),
-                const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Google Sign In Button
-            _buildGoogleSignInButton(
-              label: 'Sign Up with Google Account',
-              onPressed: _handleGoogleSignIn,
-            ),
-            const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 20),
+            ],
 
             // Switch to Sign In
             Center(
@@ -1602,84 +2059,36 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
   }
 
-  // STEP 2: Separate Verification of Email OTP & Phone OTP
-  Widget _buildSignUpOtpStep() {
+  // STEP 2: Dedicated Mobile Phone Number Page
+  Widget _buildSignUpPhoneStep() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final verifiedCount = (_isEmailVerified ? 1 : 0) + (_isPhoneVerified ? 1 : 0);
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Security Verification Header Card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [const Color(0xFF1E3A8A).withValues(alpha: 0.5), const Color(0xFF1E293B)]
-                    : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE)),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.shield_rounded, color: Color(0xFF2563EB), size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'STEP 2 OF 3 • CONTACT VERIFICATION',
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF2563EB), letterSpacing: 0.8),
-                              ),
-                              Text(
-                                '$verifiedCount / 2 VERIFIED',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  color: verifiedCount == 2 ? const Color(0xFF10B981) : const Color(0xFFD97706),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: verifiedCount / 2.0,
-                              minHeight: 5,
-                              backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                verifiedCount == 2 ? const Color(0xFF10B981) : const Color(0xFF2563EB),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+          // Step Indicator Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isDark ? const Color(0xFF059669) : const Color(0xFFA7F3D0)),
                 ),
-              ],
-            ),
+                child: const Text(
+                  'STEP 2 OF 3',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF059669), letterSpacing: 0.8),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text('Mobile Phone Verification', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Text(
-            'Verify Email & Phone',
+            'Enter Mobile Number',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
@@ -1688,315 +2097,291 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 4),
           Text(
-            'Enter the 6-digit verification codes sent separately to your Email and Mobile Phone',
+            'Enter your 10-digit mobile number and verify via SMS OTP code',
             style: TextStyle(
               fontSize: 13,
               color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
             ),
           ),
+          const SizedBox(height: 16),
+
+          // VERIFIED EMAIL SUMMARY CARD
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.3) : const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: isDark ? const Color(0xFF059669) : const Color(0xFFA7F3D0)),
+            ),
+            child: Row(
+              children: [
+                Icon(_isGoogleOnboarding ? Icons.g_mobiledata_rounded : Icons.mark_email_read_rounded, size: 20, color: const Color(0xFF059669)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isGoogleOnboarding ? 'EMAIL VERIFIED VIA GOOGLE' : 'EMAIL ADDRESS VERIFIED ✓',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF059669), letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _signUpEmailController.text.isNotEmpty ? _signUpEmailController.text : 'Verified Email',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 20),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
 
-          // --- SECTION A: EMAIL OTP VERIFICATION ---
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _isEmailVerified
-                  ? (isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5))
-                  : (isDark ? Colors.black : const Color(0xFFF8FAFC)),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: _isEmailVerified
-                    ? (isDark ? const Color(0xFF059669) : const Color(0xFFA7F3D0))
-                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-                width: 1.2,
+          // 1-TAP DEVICE SIM PICKER BUTTON
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: _showDevicePhoneHintSheet,
+              icon: const Icon(Icons.sim_card_rounded, color: Color(0xFF2563EB), size: 20),
+              label: const Text(
+                '📱 Select Phone from SIM Card (1-Tap Hint)',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF2563EB)),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.email_outlined, size: 18, color: Color(0xFF2563EB)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _signUpEmailController.text,
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : const Color(0xFF0F172A)),
-                      ),
-                    ),
-                    if (_isEmailVerified && _isGoogleOnboarding)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF059669),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.g_mobiledata_rounded, size: 16, color: Colors.white),
-                            SizedBox(width: 2),
-                            Text('VERIFIED VIA GOOGLE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      )
-                    else if (_isEmailVerified)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.check_rounded, size: 12, color: Colors.white),
-                            SizedBox(width: 4),
-                            Text('VERIFIED', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-                if (!_isEmailVerified) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _emailOtpController.text = _generatedEmailOtp;
-                            });
-                          },
-                          icon: const Icon(Icons.mark_email_read_rounded, size: 14),
-                          label: Text('Demo Email OTP: $_generatedEmailOtp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF2563EB),
-                            backgroundColor: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.3) : const Color(0xFFEFF6FF),
-                            side: BorderSide(color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE)),
-                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 44,
-                          child: TextFormField(
-                            controller: _emailOtpController,
-                            keyboardType: TextInputType.number,
-                            maxLength: 6,
-                            textAlign: TextAlign.center,
-                            style: _otpTextStyle,
-                            onChanged: (val) {
-                              if (val.trim().length == 6) {
-                                _handleVerifyEmailOtp();
-                              }
-                            },
-                            decoration: InputDecoration(
-                              hintText: '• • • • • •',
-                              hintStyle: TextStyle(fontSize: 16, letterSpacing: 4, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1)),
-                              counterText: '',
-                              filled: true,
-                              fillColor: isDark ? Colors.black : Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))),
-                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8)),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: _handleVerifyEmailOtp,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        child: const Text('Verify Email', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
+              style: OutlinedButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.25) : const Color(0xFFEFF6FF),
+                side: BorderSide(color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE), width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
             ),
           ),
           const SizedBox(height: 16),
 
-          // --- SECTION B: PHONE OTP VERIFICATION ---
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _isPhoneVerified
-                  ? (isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5))
-                  : (isDark ? Colors.black : const Color(0xFFF8FAFC)),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: _isPhoneVerified
-                    ? (isDark ? const Color(0xFF059669) : const Color(0xFFA7F3D0))
-                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-                width: 1.2,
-              ),
+          // MOBILE PHONE NUMBER FIELD
+          Text(
+            'MOBILE PHONE NUMBER',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+              letterSpacing: 0.8,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.phone_android_rounded, size: 18, color: Color(0xFF2563EB)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _signUpPhoneController.text.isNotEmpty
-                            ? '+91 ${_signUpPhoneController.text}'
-                            : 'Enter Mobile Phone Number below',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : const Color(0xFF0F172A)),
-                      ),
+          ),
+          const SizedBox(height: 8),
+          AutofillGroup(
+            child: TextFormField(
+              controller: _signUpPhoneController,
+              focusNode: _signUpPhoneFocusNode,
+              keyboardType: TextInputType.phone,
+              autofillHints: const [
+                AutofillHints.telephoneNumber,
+                AutofillHints.telephoneNumberNational,
+                AutofillHints.telephoneNumberDevice,
+              ],
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(10),
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              maxLength: 10,
+              style: _inputTextStyle,
+              decoration: _buildInputDecoration(
+                hintText: 'Enter 10-digit mobile number',
+                prefixIcon: Icons.phone_android_rounded,
+                counterText: '',
+              ),
+              onChanged: (val) {
+                setState(() {});
+              },
+            ),
+          ),
+          
+          // DYNAMIC AUTO-DETECTED SIM OPERATOR BADGE (Jio, Airtel, Vi, BSNL)
+          Builder(
+            builder: (context) {
+              final detectedOperator = TelecomHelper.detectOperator(_signUpPhoneController.text);
+              if (detectedOperator == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: detectedOperator.badgeColor.withValues(alpha: isDark ? 0.5 : 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: detectedOperator.primaryColor.withValues(alpha: 0.7),
+                      width: 1.5,
                     ),
-                    if (_isPhoneVerified)
+                  ),
+                  child: Row(
+                    children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
-                          borderRadius: BorderRadius.circular(10),
+                          color: detectedOperator.primaryColor,
+                          shape: BoxShape.circle,
                         ),
-                        child: const Row(
+                        child: Icon(detectedOperator.icon, color: Colors.white, size: 16),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.check_rounded, size: 12, color: Colors.white),
-                            SizedBox(width: 4),
-                            Text('VERIFIED', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            Row(
+                              children: [
+                                Text(
+                                  'AUTO SIM: ',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    color: detectedOperator.primaryColor,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                                Text(
+                                  detectedOperator.name,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Network: ${detectedOperator.networkType}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                  ],
-                ),
-                if (!_isPhoneVerified) ...[
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _signUpPhoneController,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      LengthLimitingTextInputFormatter(10),
-                      FilteringTextInputFormatter.digitsOnly,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: detectedOperator.primaryColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'OPERATOR',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            color: detectedOperator.primaryColor,
+                          ),
+                        ),
+                      ),
                     ],
-                    maxLength: 10,
-                    style: _inputTextStyle,
-                    decoration: _buildInputDecoration(
-                      hintText: 'Enter 10-digit mobile number',
-                      prefixIcon: Icons.phone_outlined,
-                      counterText: '',
-                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+
+          // AUTO-FILL & INSTANT VERIFY PHONE BUTTON
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _phoneOtpController.text = _generatedPhoneOtp;
+                    });
+                  },
+                  icon: const Icon(Icons.sms_rounded, size: 14),
+                  label: Text('Auto-fill SMS OTP: $_generatedPhoneOtp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF2563EB),
+                    backgroundColor: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.3) : const Color(0xFFEFF6FF),
+                    side: BorderSide(color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE)),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                if (_signUpPhoneController.text.trim().length < 10) {
+                  TopNotification.showError(context, 'Please enter your 10-digit mobile phone number');
+                  return;
+                }
+                _phoneOtpController.text = _generatedPhoneOtp;
+                _handleVerifyPhoneOtp();
+              },
+              icon: const Icon(Icons.flash_on_rounded, size: 16),
+              label: const Text(
+                'Instant Verify Phone ⚡',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // SMS OTP ENTRY FIELD & VERIFY BUTTON
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 46,
+                  child: TextFormField(
+                    controller: _phoneOtpController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: _otpTextStyle,
                     onChanged: (val) {
-                      setState(() {});
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            if (_signUpPhoneController.text.trim().length < 10) {
-                              _signUpPhoneController.text = '9876543210';
-                            }
-                            setState(() {
-                              _phoneOtpController.text = _generatedPhoneOtp;
-                            });
-                          },
-                          icon: const Icon(Icons.sms_rounded, size: 14),
-                          label: Text('Demo Phone OTP: $_generatedPhoneOtp', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF2563EB),
-                            backgroundColor: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.3) : const Color(0xFFEFF6FF),
-                            side: BorderSide(color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFFBFDBFE)),
-                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 42,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        if (_signUpPhoneController.text.trim().length < 10) {
-                          _signUpPhoneController.text = '9876543210';
-                        }
-                        _phoneOtpController.text = _generatedPhoneOtp;
+                      if (val.trim().length == 6) {
                         _handleVerifyPhoneOtp();
-                      },
-                      icon: const Icon(Icons.flash_on_rounded, size: 16),
-                      label: const Text(
-                        'Auto-Detect SMS & Instant Verify Phone ⚡',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
-                      ),
+                      }
+                    },
+                    decoration: InputDecoration(
+                      hintText: '• • • • • •',
+                      hintStyle: TextStyle(fontSize: 16, letterSpacing: 4, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1)),
+                      counterText: '',
+                      filled: true,
+                      fillColor: isDark ? Colors.black : Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8)),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 44,
-                          child: TextFormField(
-                            controller: _phoneOtpController,
-                            keyboardType: TextInputType.number,
-                            maxLength: 6,
-                            textAlign: TextAlign.center,
-                            style: _otpTextStyle,
-                            onChanged: (val) {
-                              if (val.trim().length == 6) {
-                                _handleVerifyPhoneOtp();
-                              }
-                            },
-                            decoration: InputDecoration(
-                              hintText: '• • • • • •',
-                              hintStyle: TextStyle(fontSize: 16, letterSpacing: 4, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1)),
-                              counterText: '',
-                              filled: true,
-                              fillColor: isDark ? Colors.black : Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))),
-                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8)),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: _handleVerifyPhoneOtp,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        child: const Text('Verify Phone', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _handleVerifyPhoneOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                ),
+                child: const Text('Verify Phone', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
 
-          // --- 30-SECOND RESEND OTP TIMER CARD ---
+          // 30-SECOND RESEND OTP TIMER CARD
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -2046,12 +2431,12 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 20),
 
-          // Proceed to Campus Details Button
+          // PROCEED BUTTON
           SizedBox(
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: (_isEmailVerified && _isPhoneVerified) ? _handleProceedToProfile : null,
+              onPressed: _isPhoneVerified ? _handleProceedToProfile : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2563EB),
                 disabledBackgroundColor: const Color(0xFFCBD5E1),
@@ -2062,29 +2447,22 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              child: Row(
+              child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        (_isEmailVerified && _isPhoneVerified)
-                            ? 'Continue to Campus Details'
-                            : 'Verify Both Email & Phone to Proceed',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-                      ),
-                    ),
+                  Text(
+                    'Continue to Campus Profile Details',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.3),
                   ),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.arrow_forward_rounded, size: 18),
+                  SizedBox(width: 6),
+                  Icon(Icons.arrow_forward_rounded, size: 18),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 14),
 
-          // Edit Contact Information Button
+          // BACK BUTTON
           Center(
             child: TextButton.icon(
               onPressed: () {
@@ -2094,7 +2472,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               },
               icon: const Icon(Icons.arrow_back_rounded, size: 16, color: Color(0xFF64748B)),
               label: const Text(
-                'Edit Email / Mobile Number',
+                '← Change Auth Method / Email',
                 style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13),
               ),
             ),

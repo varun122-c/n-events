@@ -33,6 +33,14 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    applicationVariants.all {
+        outputs.all {
+            (this as? com.android.build.gradle.internal.api.ApkVariantOutputImpl)?.let {
+                it.outputFileName = "N_Events-${buildType.name}.apk"
+            }
+        }
+    }
 }
 
 kotlin {

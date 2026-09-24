@@ -37,13 +37,13 @@ class ChatMessageModel {
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) {
     return ChatMessageModel(
-      id: json['id'] as String,
-      eventId: json['eventId'] as String,
-      studentRoll: json['studentRoll'] as String,
-      studentName: json['studentName'] as String,
-      senderRole: json['senderRole'] as String,
-      text: json['text'] as String,
-      timestamp: DateTime.parse(json['timestamp'] as String),
+      id: json['id'] as String? ?? '',
+      eventId: json['eventId'] as String? ?? '',
+      studentRoll: json['studentRoll'] as String? ?? '',
+      studentName: json['studentName'] as String? ?? '',
+      senderRole: json['senderRole'] as String? ?? 'student',
+      text: json['text'] as String? ?? '',
+      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
       isRead: json['isRead'] as bool? ?? true,
       status: json['status'] as String? ?? 'seen',
     );

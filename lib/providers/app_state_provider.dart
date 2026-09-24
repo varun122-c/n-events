@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,8 +13,10 @@ import '../models/notification_model.dart';
 import '../models/chat_message_model.dart';
 import '../models/staff_assignment_model.dart';
 import '../models/user_model.dart';
+import '../models/certificate_template_model.dart';
 import '../services/supabase_service.dart';
 import '../services/supabase_db_service.dart';
+import '../services/sender_email_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class AppStateProvider extends ChangeNotifier {
@@ -25,6 +28,7 @@ class AppStateProvider extends ChangeNotifier {
   static const String _keyChatMessages = 'app_chat_messages';
   static const String _keyThemeMode = 'app_theme_mode';
   static const String _keyStaffAssignments = 'app_staff_assignments';
+  static const String _keyCertificateTemplates = 'app_cert_templates';
   // Bump this version string whenever mock data must be cleared from the cache
   static const String _cacheVersion = 'v2_no_mock';
   static const String _keyCacheVersion = 'app_cache_version';
@@ -38,6 +42,7 @@ class AppStateProvider extends ChangeNotifier {
   List<NotificationModel> _notifications = [];
   List<ChatMessageModel> _chatMessages = [];
   List<StaffAssignment> _staffAssignments = [];
+  final List<CertificateTemplate> _certificateTemplates = [];
   List<UserModel> _dbProfiles = [];
   List<UserModel> get dbProfiles => List.unmodifiable(_dbProfiles);
 
@@ -82,30 +87,34 @@ class AppStateProvider extends ChangeNotifier {
   // ─── INITIALISATION ──────────────────────────────────────────────────────
 
   Future<void> _initData() async {
-    // 1. Load local cache first so UI is immediately responsive
-    await _loadFromLocalCache();
+    try {
+      // 1. Load local cache first so UI is immediately responsive
+      await _loadFromLocalCache();
 
-    // 2. Then fetch fresh data from Supabase and update
-    await _fetchFromSupabase();
+      // 2. Then fetch fresh data from Supabase and update
+      await _fetchFromSupabase();
 
-    // 3. Subscribe to realtime changes
-    _subscribeRealtime();
+      // 3. Subscribe to realtime changes
+      _subscribeRealtime();
 
-    // 4. Initialize Local Notifications plugin
-    await _initLocalNotifications();
+      // 4. Initialize Local Notifications plugin
+      await _initLocalNotifications();
 
-    // Load theme preference
-    final prefs = await SharedPreferences.getInstance();
-    final themeStr = prefs.getString(_keyThemeMode) ?? 'system';
-    if (themeStr == 'light') {
-      _themeMode = ThemeMode.light;
-    } else if (themeStr == 'dark') {
-      _themeMode = ThemeMode.dark;
-    } else {
-      _themeMode = ThemeMode.system;
+      // Load theme preference
+      final prefs = await SharedPreferences.getInstance();
+      final themeStr = prefs.getString(_keyThemeMode) ?? 'system';
+      if (themeStr == 'light') {
+        _themeMode = ThemeMode.light;
+      } else if (themeStr == 'dark') {
+        _themeMode = ThemeMode.dark;
+      } else {
+        _themeMode = ThemeMode.system;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('AppStateProvider initData error: $e');
     }
-
-    notifyListeners();
   }
 
   Future<void> _loadFromLocalCache() async {
@@ -345,6 +354,92 @@ class AppStateProvider extends ChangeNotifier {
         jsonEncode(_staffAssignments.map((s) => s.toMap()).toList()));
   }
 
+  Future<void> _saveCertificateTemplates() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _keyCertificateTemplates,
+        jsonEncode(_certificateTemplates.map((t) => t.toMap()).toList()));
+  }
+
+  // ─── CERTIFICATE TEMPLATE CRUD ───────────────────────────────────────────
+
+  CertificateTemplate getCertificateTemplate(String eventId) {
+    try {
+      return _certificateTemplates.firstWhere((t) => t.eventId == eventId);
+    } catch (_) {
+      final event = _events.firstWhere((e) => e.id == eventId, orElse: () => Event(
+        id: eventId,
+        title: 'Campus Event',
+        description: '',
+        bannerUrl: '',
+        dateTime: DateTime.now(),
+        venue: '',
+        category: '',
+        coordinatorName: '',
+        coordinatorPhone: '',
+      ));
+      return CertificateTemplate(
+        id: _uuid.v4(),
+        eventId: eventId,
+        title: 'CERTIFICATE OF PARTICIPATION',
+        subtitle: 'PROUDLY PRESENTED TO',
+        bodyText: 'for active and successful participation in "${event.title}"',
+        signatoryName1: 'Dr. A. Sharma',
+        signatoryRole1: 'Principal / Patron',
+        signatoryName2: event.coordinatorName.isNotEmpty ? event.coordinatorName : 'Event Coordinator',
+        signatoryRole2: 'Convener',
+        themeColorHex: '#FFD700',
+        badgeStyle: 'Gold',
+      );
+    }
+  }
+
+  Future<void> saveCertificateTemplate(CertificateTemplate template) async {
+    final idx = _certificateTemplates.indexWhere((t) => t.eventId == template.eventId || t.id == template.id);
+    final updated = template.copyWith(updatedAt: DateTime.now());
+    if (idx != -1) {
+      _certificateTemplates[idx] = updated;
+    } else {
+      _certificateTemplates.add(updated);
+    }
+    await _saveCertificateTemplates();
+    await SupabaseDbService.upsertCertificateTemplate(updated);
+    notifyListeners();
+  }
+
+  /// Mass publish digital certificates for all participants/attendees of an event
+  Future<int> massPublishCertificates(String eventId) async {
+    int publishedCount = 0;
+    final eventIndex = _events.indexWhere((e) => e.id == eventId);
+    final eventTitle = eventIndex != -1 ? _events[eventIndex].title : 'Campus Event';
+
+    for (int i = 0; i < _registrations.length; i++) {
+      if (_registrations[i].eventId == eventId) {
+        final reg = _registrations[i];
+        if (!reg.isCertificatePublished) {
+          final updated = reg.copyWith(
+            status: 'Attended',
+            isCertificatePublished: true,
+          );
+          _registrations[i] = updated;
+          publishedCount++;
+          await SupabaseDbService.updateRegistrationDetails(updated);
+        }
+      }
+    }
+
+    if (publishedCount > 0) {
+      await _saveRegistrations();
+      await addNotification(
+        '🎉 Certificates Published!',
+        'Official digital certificates for "$eventTitle" have been published by Admin. Check your Certificates tab now!',
+        linkedEventId: eventId,
+      );
+      notifyListeners();
+    }
+    return publishedCount;
+  }
+
   // ─── EVENT CRUD ──────────────────────────────────────────────────────────
 
   Future<void> addEvent(Event event) async {
@@ -458,18 +553,35 @@ class AppStateProvider extends ChangeNotifier {
     _registrations.add(newReg);
     await _saveRegistrations();
 
-    // Trigger notification
+    // Trigger notification & email via Sender.net API
     final eventIndex = _events.indexWhere((e) => e.id == eventId);
     if (eventIndex != -1) {
+      final event = _events[eventIndex];
       final ticketCode = (currentUserId != null && currentUserId.isNotEmpty)
           ? UserModel.generate10DigitParticipantCode(currentUserId)
           : UserModel.generate10DigitParticipantCode(rollNumber);
       await addNotification(
         '🎉 Booking Confirmed!',
-        'Successfully registered for "${_events[eventIndex].title}". Your 10-digit ticket pass code is $ticketCode.',
+        'Successfully registered for "${event.title}". Your 10-digit ticket pass code is $ticketCode.',
         linkedEventId: eventId,
         userId: currentUserId,
       );
+
+      // Attempt sending transactional email via Sender.net API v2
+      final userEmail = SupabaseService.currentUser?.email;
+      if (userEmail != null && userEmail.isNotEmpty) {
+        SenderEmailService.sendRegistrationConfirmation(
+          recipientEmail: userEmail,
+          recipientName: fullName,
+          eventTitle: event.title,
+          eventDate: '${event.dateTime.day}/${event.dateTime.month}/${event.dateTime.year} at ${event.dateTime.hour}:${event.dateTime.minute.toString().padLeft(2, '0')}',
+          eventLocation: event.venue,
+          ticketCode: ticketCode,
+          category: event.category,
+        ).then((res) {
+          debugPrint('Registration Email result: ${res['message']}');
+        });
+      }
     }
 
     notifyListeners();
@@ -539,6 +651,54 @@ class AppStateProvider extends ChangeNotifier {
         await addNotification(
           '🎉 Certificate Published!',
           'Your official digital certificate for "$eventTitle" has been published by Admin and is now downloadable in your Certificates tab!',
+          linkedEventId: oldReg.eventId,
+        );
+      }
+      notifyListeners();
+    }
+  }
+
+  /// Mark a registration as paid or unpaid, with an optional payment note.
+  Future<void> updatePaymentStatus(
+    String regId, {
+    required bool isPaid,
+    String paymentNote = '',
+  }) async {
+    final index = _registrations.indexWhere((r) => r.id == regId);
+    if (index != -1) {
+      final updatedReg = _registrations[index].copyWith(
+        isPaid: isPaid,
+        paymentNote: paymentNote,
+      );
+      _registrations[index] = updatedReg;
+      await _saveRegistrations();
+      await SupabaseDbService.updateRegistrationDetails(updatedReg);
+      notifyListeners();
+    }
+  }
+
+  /// Cancel a registration with a required reason string.
+  /// Sets the status to 'Cancelled' and stores the reason in paymentNote field.
+  Future<void> removeRegistrationWithReason(
+    String regId,
+    String reason,
+  ) async {
+    final index = _registrations.indexWhere((r) => r.id == regId);
+    if (index != -1) {
+      final oldReg = _registrations[index];
+      final updatedReg = oldReg.copyWith(
+        status: 'Cancelled',
+        paymentNote: reason.isNotEmpty ? 'Removed: $reason' : 'Cancelled by Admin',
+      );
+      _registrations[index] = updatedReg;
+      await _saveRegistrations();
+      await SupabaseDbService.updateRegistrationDetails(updatedReg);
+
+      final eventIndex = _events.indexWhere((e) => e.id == oldReg.eventId);
+      if (eventIndex != -1) {
+        await addNotification(
+          'Registration Removed',
+          'Your registration for "${_events[eventIndex].title}" has been removed by Admin. Reason: $reason',
           linkedEventId: oldReg.eventId,
         );
       }
@@ -784,26 +944,32 @@ class AppStateProvider extends ChangeNotifier {
       FlutterLocalNotificationsPlugin();
 
   Future<void> _initLocalNotifications() async {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    if (kIsWeb) return;
+    try {
+      const AndroidInitializationSettings initializationSettingsAndroid =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
+      const InitializationSettings initializationSettings =
+          InitializationSettings(android: initializationSettingsAndroid);
 
-    await _localNotificationsPlugin.initialize(
-      settings: initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {},
-    );
+      await _localNotificationsPlugin.initialize(
+        settings: initializationSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {},
+      );
 
-    final androidPlugin = _localNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-    if (androidPlugin != null) {
-      await androidPlugin.requestNotificationsPermission();
+      final androidPlugin = _localNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        await androidPlugin.requestNotificationsPermission();
+      }
+    } catch (e) {
+      debugPrint('Local notifications init warning: $e');
     }
   }
 
   Future<void> _showSystemNotification(String title, String message) async {
+    if (kIsWeb) return;
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'n_vents_notifications',
@@ -975,6 +1141,21 @@ class AppStateProvider extends ChangeNotifier {
       '🎉 Staff Role Granted: $subRoleLabel',
       'Congratulations ${user.name}! You have been appointed as $subRoleLabel. Access your coordinator tools now.',
     );
+
+    // Send email notification via Sender.net API v2
+    if (user.email.isNotEmpty) {
+      final firstEventTitle = assignedEventIds.isNotEmpty
+          ? (_events.firstWhere((e) => e.id == assignedEventIds.first, orElse: () => _events.first).title)
+          : 'Campus Events';
+      SenderEmailService.sendStaffAssignmentEmail(
+        recipientEmail: user.email,
+        recipientName: user.name,
+        eventTitle: firstEventTitle,
+        assignedRole: subRoleLabel,
+      ).then((res) {
+        debugPrint('Staff Role Email result: ${res['message']}');
+      });
+    }
 
     notifyListeners();
   }

@@ -7,18 +7,18 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="N-Events — Campus Event Hub & Registration Portal">
+  <meta name="description" content="N Events — Campus Event Hub & Registration Portal">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="N-Events">
+  <meta name="apple-mobile-web-app-title" content="N Events">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>N-Events Campus Portal</title>
+  <title>N Events Campus Portal</title>
   <link rel="manifest" href="manifest.json">
 
   <style>
@@ -89,6 +89,31 @@
       <div class="n-badge">Ñ</div>
     </div>
   </div>
+  <script>
+    function removeLoadingIndicator() {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        loading.style.opacity = '0';
+        loading.style.transition = 'opacity 0.4s ease-out';
+        setTimeout(function () {
+          if (loading && loading.parentNode) {
+            loading.parentNode.removeChild(loading);
+          }
+        }, 400);
+      }
+    }
+
+    window.addEventListener('flutter-first-frame', removeLoadingIndicator);
+
+    // MutationObserver fallback to remove loading element as soon as Flutter DOM node is inserted
+    var observer = new MutationObserver(function (mutations) {
+      if (document.querySelector('flutter-view') || document.querySelector('flt-glass-pane') || document.querySelector('flt-renderer')) {
+        removeLoadingIndicator();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

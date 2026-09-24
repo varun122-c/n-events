@@ -68,17 +68,24 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Check auth status after 2 seconds and navigate
     Future.delayed(const Duration(milliseconds: 2000), () async {
-      if (mounted) {
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        if (!authProvider.isInitialized) {
-          await authProvider.ensureInitialized();
-        }
+      try {
         if (mounted) {
-          if (authProvider.isLoggedIn) {
-            context.go(authProvider.homeRoute);
-          } else {
-            context.go('/auth');
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          if (!authProvider.isInitialized) {
+            await authProvider.ensureInitialized();
           }
+          if (mounted) {
+            if (authProvider.isLoggedIn) {
+              context.go(authProvider.homeRoute);
+            } else {
+              context.go('/auth');
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Splash navigation fallback error: $e');
+        if (mounted) {
+          context.go('/auth');
         }
       }
     });

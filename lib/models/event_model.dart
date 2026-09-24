@@ -1,5 +1,57 @@
 import 'review_model.dart';
 
+// ─── COMBO OFFER ─────────────────────────────────────────────────────────────
+/// A combo offer bundles multiple sub-events at a discounted price.
+class ComboOffer {
+  final String id;
+  final String label; // e.g. "Tech Duo", "All-Access Pass"
+  final String description; // e.g. "Register for Code Relay + Paper Presentation"
+  final List<String> subEventIds; // IDs of the sub-events included
+  final double comboPrice; // Discounted price for the bundle
+
+  ComboOffer({
+    required this.id,
+    required this.label,
+    this.description = '',
+    required this.subEventIds,
+    required this.comboPrice,
+  });
+
+  bool get isFree => comboPrice <= 0;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'label': label,
+        'description': description,
+        'subEventIds': subEventIds,
+        'comboPrice': comboPrice,
+      };
+
+  factory ComboOffer.fromJson(Map<String, dynamic> json) => ComboOffer(
+        id: json['id'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        subEventIds: (json['subEventIds'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+        comboPrice: (json['comboPrice'] as num?)?.toDouble() ?? 0.0,
+      );
+
+  ComboOffer copyWith({
+    String? id,
+    String? label,
+    String? description,
+    List<String>? subEventIds,
+    double? comboPrice,
+  }) =>
+      ComboOffer(
+        id: id ?? this.id,
+        label: label ?? this.label,
+        description: description ?? this.description,
+        subEventIds: subEventIds ?? this.subEventIds,
+        comboPrice: comboPrice ?? this.comboPrice,
+      );
+}
+
+
 class SubEvent {
   final String id;
   final String title;
@@ -86,6 +138,7 @@ class Event {
   final double price;
   final List<SubEvent> subEvents;
   final List<Review> reviews;
+  final List<ComboOffer> comboOffers;
 
   Event({
     required this.id,
@@ -101,7 +154,9 @@ class Event {
     this.price = 0.0,
     this.subEvents = const [],
     this.reviews = const [],
+    this.comboOffers = const [],
   });
+
 
   bool get isFree => price <= 0;
 
@@ -127,6 +182,7 @@ class Event {
       'price': price,
       'subEvents': subEvents.map((s) => s.toJson()).toList(),
       'reviews': reviews.map((r) => r.toJson()).toList(),
+      'comboOffers': comboOffers.map((c) => c.toJson()).toList(),
     };
   }
 
@@ -141,20 +197,26 @@ class Event {
         ? subEventsJson.map((item) => SubEvent.fromJson(item as Map<String, dynamic>)).toList()
         : [];
 
+    var comboOffersJson = json['comboOffers'] as List<dynamic>?;
+    List<ComboOffer> comboOffersList = comboOffersJson != null
+        ? comboOffersJson.map((item) => ComboOffer.fromJson(item as Map<String, dynamic>)).toList()
+        : [];
+
     return Event(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      bannerUrl: json['bannerUrl'] as String,
-      dateTime: DateTime.parse(json['dateTime'] as String),
-      venue: json['venue'] as String,
-      category: json['category'] as String,
-      coordinatorName: json['coordinatorName'] as String,
-      coordinatorPhone: json['coordinatorPhone'] as String,
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      bannerUrl: json['bannerUrl'] as String? ?? '',
+      dateTime: DateTime.tryParse(json['dateTime']?.toString() ?? '') ?? DateTime.now(),
+      venue: json['venue'] as String? ?? '',
+      category: json['category'] as String? ?? 'Technical',
+      coordinatorName: json['coordinatorName'] as String? ?? '',
+      coordinatorPhone: json['coordinatorPhone'] as String? ?? '',
       maxSeats: json['maxSeats'] as int? ?? 100,
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       subEvents: subEventsList,
       reviews: reviewsList,
+      comboOffers: comboOffersList,
     );
   }
 
@@ -172,6 +234,7 @@ class Event {
     double? price,
     List<SubEvent>? subEvents,
     List<Review>? reviews,
+    List<ComboOffer>? comboOffers,
   }) {
     return Event(
       id: id ?? this.id,
@@ -187,6 +250,7 @@ class Event {
       price: price ?? this.price,
       subEvents: subEvents ?? this.subEvents,
       reviews: reviews ?? this.reviews,
+      comboOffers: comboOffers ?? this.comboOffers,
     );
   }
 }

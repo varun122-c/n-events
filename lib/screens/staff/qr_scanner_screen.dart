@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/event_model.dart';
@@ -101,7 +102,13 @@ class _QrScannerScreenState extends State<QrScannerScreen>
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go(authProvider.homeRoute);
+            }
+          },
         ),
         actions: [
           IconButton(
@@ -118,7 +125,46 @@ class _QrScannerScreenState extends State<QrScannerScreen>
             icon: const Icon(Icons.flip_camera_ios_rounded, color: Colors.white60),
             onPressed: () => _scannerController.switchCamera(),
           ),
-          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white70),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (val) {
+              if (val == 'personal') {
+                authProvider.setPersonalAccountMode(true);
+                context.go('/student');
+              } else if (val == 'dashboard') {
+                authProvider.setPersonalAccountMode(false);
+                context.go(authProvider.homeRoute);
+              } else if (val == 'logout') {
+                authProvider.logout();
+                context.go('/auth');
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'personal',
+                child: Row(
+                  children: [
+                    Icon(Icons.person_rounded, size: 18, color: Color(0xFF2563EB)),
+                    SizedBox(width: 8),
+                    Text('Shift to Personal Account'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'dashboard',
+                child: Row(
+                  children: [
+                    Icon(Icons.dashboard_rounded, size: 18, color: Color(0xFF7C3AED)),
+                    SizedBox(width: 8),
+                    Text('Worker / Staff Dashboard'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(value: 'logout', child: Text('Sign Out')),
+            ],
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
@@ -129,7 +175,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
               color: const Color(0xFF0D1117),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: DropdownButtonFormField<Event>(
-                value: _selectedEvent,
+                initialValue: _selectedEvent,
                 hint: const Text('Select event to scan for…',
                     style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
                 dropdownColor: const Color(0xFF161B22),

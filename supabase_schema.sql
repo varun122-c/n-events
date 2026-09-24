@@ -72,17 +72,19 @@ drop policy if exists "Anyone can view profiles" on public.profiles;
 create policy "Anyone can view profiles" on public.profiles for select using (true);
 
 drop policy if exists "Users can update own profile" on public.profiles;
-create policy "Users can update own profile" on public.profiles for update using (true);
+drop policy if exists "Users and admins can update profile" on public.profiles;
+create policy "Users and admins can update profile" on public.profiles for update using (auth.uid() = id or public.is_admin());
 
 drop policy if exists "Users can insert own profile" on public.profiles;
-create policy "Users can insert own profile" on public.profiles for insert with check (true);
+drop policy if exists "Users and admins can insert profile" on public.profiles;
+create policy "Users and admins can insert profile" on public.profiles for insert with check (auth.uid() = id or public.is_admin());
 
 -- ─── AUTO-CREATE PROFILE ON SIGNUP TRIGGER ───────────────────
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (
-    id, name, roll_number, department, college, year, phone, dob, gender, role, avatar_index
+    id, name, roll_number, department, college, year, phone, dob, gender, role, sub_role, avatar_index, custom_avatar_url, participant_code, assigned_department, assigned_event_ids
   )
   values (
     new.id,
@@ -94,12 +96,17 @@ begin
     coalesce(new.raw_user_meta_data->>'phone', ''),
     coalesce(new.raw_user_meta_data->>'dob', ''),
     coalesce(new.raw_user_meta_data->>'gender', 'Male'),
-    case when lower(new.email) = 'nevents026@gmail.com' then 'admin' else coalesce(new.raw_user_meta_data->>'role', 'student') end,
-    coalesce((new.raw_user_meta_data->>'avatar_index')::int, 0)
+    coalesce(new.raw_user_meta_data->>'role', 'student'),
+    coalesce(new.raw_user_meta_data->>'sub_role', ''),
+    coalesce((new.raw_user_meta_data->>'avatar_index')::int, 0),
+    coalesce(new.raw_user_meta_data->>'custom_avatar_url', ''),
+    coalesce(new.raw_user_meta_data->>'participant_code', ''),
+    coalesce(new.raw_user_meta_data->>'assigned_department', ''),
+    coalesce(array(select jsonb_array_elements_text(new.raw_user_meta_data->'assigned_event_ids')), '{}'::text[])
   )
   on conflict (id) do update set
     name = excluded.name,
-    role = case when lower(new.email) = 'nevents026@gmail.com' then 'admin' else excluded.role end,
+    role = excluded.role,
     roll_number = case when excluded.roll_number <> '' then excluded.roll_number else public.profiles.roll_number end,
     department = case when excluded.department <> '' then excluded.department else public.profiles.department end,
     college = case when excluded.college <> '' then excluded.college else public.profiles.college end,
@@ -117,21 +124,37 @@ create trigger on_auth_user_created
 
 -- ─── EVENTS ──────────────────────────────────────────────────
 create table if not exists public.events (
-  id                text primary key default gen_random_uuid()::text,
-  title             text not null,
-  description       text not null default '',
-  banner_url        text not null default '',
-  date_time         timestamptz not null,
-  venue             text not null default '',
-  category          text not null default 'Technical',
-  coordinator_name  text not null default '',
-  coordinator_phone text not null default '',
-  max_seats         int  not null default 100,
-  reviews           jsonb not null default '[]',
-  created_by        uuid references auth.users(id),
-  created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now()
+  id                  text primary key default gen_random_uuid()::text,
+  title               text not null,
+  description         text not null default '',
+  banner_url          text not null default '',
+  date_time           timestamptz not null,
+  venue               text not null default '',
+  category            text not null default 'Technical',
+  coordinator_name    text not null default '',
+  coordinator_phone   text not null default '',
+  max_seats           int  not null default 100,
+  is_free             boolean not null default true,
+  price               numeric not null default 0,
+  sub_events          jsonb not null default '[]',
+  combo_offers        jsonb not null default '[]',
+  allowed_departments text[] not null default '{}',
+  allowed_years       text[] not null default '{}',
+  rules               text[] not null default '{}',
+  reviews             jsonb not null default '[]',
+  created_by          uuid references auth.users(id),
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
 );
+
+-- Migrations for existing events table
+alter table public.events add column if not exists is_free boolean not null default true;
+alter table public.events add column if not exists price numeric not null default 0;
+alter table public.events add column if not exists sub_events jsonb not null default '[]';
+alter table public.events add column if not exists combo_offers jsonb not null default '[]';
+alter table public.events add column if not exists allowed_departments text[] not null default '{}';
+alter table public.events add column if not exists allowed_years text[] not null default '{}';
+alter table public.events add column if not exists rules text[] not null default '{}';
 
 drop trigger if exists events_updated_at on public.events;
 create trigger events_updated_at before update on public.events for each row execute procedure public.handle_updated_at();
@@ -142,13 +165,16 @@ drop policy if exists "Anyone can view events" on public.events;
 create policy "Anyone can view events" on public.events for select using (true);
 
 drop policy if exists "Anyone can insert events" on public.events;
-create policy "Anyone can insert events" on public.events for insert with check (true);
+drop policy if exists "Admins and staff can insert events" on public.events;
+create policy "Admins and staff can insert events" on public.events for insert with check (public.is_admin_or_staff());
 
 drop policy if exists "Anyone can update events" on public.events;
-create policy "Anyone can update events" on public.events for update using (true);
+drop policy if exists "Admins and staff can update events" on public.events;
+create policy "Admins and staff can update events" on public.events for update using (public.is_admin_or_staff());
 
 drop policy if exists "Anyone can delete events" on public.events;
-create policy "Anyone can delete events" on public.events for delete using (true);
+drop policy if exists "Admins can delete events" on public.events;
+create policy "Admins can delete events" on public.events for delete using (public.is_admin());
 
 -- ─── REGISTRATIONS ───────────────────────────────────────────
 create table if not exists public.registrations (
@@ -174,6 +200,8 @@ create table if not exists public.registrations (
 alter table public.registrations add column if not exists verified_by text;
 alter table public.registrations add column if not exists verified_at timestamptz;
 alter table public.registrations add column if not exists is_certificate_published boolean not null default false;
+alter table public.registrations add column if not exists is_paid boolean not null default false;
+alter table public.registrations add column if not exists payment_note text not null default '';
 
 drop trigger if exists registrations_updated_at on public.registrations;
 create trigger registrations_updated_at before update on public.registrations for each row execute procedure public.handle_updated_at();
@@ -188,13 +216,16 @@ drop policy if exists "Anyone can view registrations" on public.registrations;
 create policy "Anyone can view registrations" on public.registrations for select using (true);
 
 drop policy if exists "Anyone can insert registrations" on public.registrations;
-create policy "Anyone can insert registrations" on public.registrations for insert with check (true);
+drop policy if exists "Users and staff can insert registrations" on public.registrations;
+create policy "Users and staff can insert registrations" on public.registrations for insert with check (auth.uid() is not null or public.is_admin_or_staff());
 
 drop policy if exists "Anyone can update registrations" on public.registrations;
-create policy "Anyone can update registrations" on public.registrations for update using (true);
+drop policy if exists "Staff and admins can update registrations" on public.registrations;
+create policy "Staff and admins can update registrations" on public.registrations for update using (auth.uid() = user_id or public.is_admin_or_staff());
 
 drop policy if exists "Anyone can delete registrations" on public.registrations;
-create policy "Anyone can delete registrations" on public.registrations for delete using (true);
+drop policy if exists "Admins and user can delete registrations" on public.registrations;
+create policy "Admins and user can delete registrations" on public.registrations for delete using (auth.uid() = user_id or public.is_admin());
 
 -- ─── BANNERS ─────────────────────────────────────────────────
 create table if not exists public.banners (
@@ -216,7 +247,8 @@ drop policy if exists "Anyone can view banners" on public.banners;
 create policy "Anyone can view banners" on public.banners for select using (true);
 
 drop policy if exists "Anyone can manage banners" on public.banners;
-create policy "Anyone can manage banners" on public.banners for all using (true);
+drop policy if exists "Admins and staff can manage banners" on public.banners;
+create policy "Admins and staff can manage banners" on public.banners for all using (public.is_admin_or_staff());
 
 -- ─── STAFF ASSIGNMENTS ───────────────────────────────────────
 create table if not exists public.staff_assignments (
@@ -240,7 +272,8 @@ drop policy if exists "Anyone can view staff assignments" on public.staff_assign
 create policy "Anyone can view staff assignments" on public.staff_assignments for select using (true);
 
 drop policy if exists "Anyone can manage staff assignments" on public.staff_assignments;
-create policy "Anyone can manage staff assignments" on public.staff_assignments for all using (true);
+drop policy if exists "Admins can manage staff assignments" on public.staff_assignments;
+create policy "Admins can manage staff assignments" on public.staff_assignments for all using (public.is_admin());
 
 -- ─── NOTIFICATIONS ───────────────────────────────────────────
 create table if not exists public.notifications (
@@ -258,16 +291,20 @@ create index if not exists notifications_user_id_idx on public.notifications(use
 alter table public.notifications enable row level security;
 
 drop policy if exists "Anyone can view notifications" on public.notifications;
-create policy "Anyone can view notifications" on public.notifications for select using (true);
+drop policy if exists "Users can view notifications" on public.notifications;
+create policy "Users can view notifications" on public.notifications for select using (user_id is null or user_id = auth.uid() or public.is_admin_or_staff());
 
 drop policy if exists "Anyone can update notifications" on public.notifications;
-create policy "Anyone can update notifications" on public.notifications for update using (true);
+drop policy if exists "Users and admins can update notifications" on public.notifications;
+create policy "Users and admins can update notifications" on public.notifications for update using (user_id = auth.uid() or public.is_admin_or_staff());
 
 drop policy if exists "Anyone can insert notifications" on public.notifications;
-create policy "Anyone can insert notifications" on public.notifications for insert with check (true);
+drop policy if exists "Admins and staff can insert notifications" on public.notifications;
+create policy "Admins and staff can insert notifications" on public.notifications for insert with check (public.is_admin_or_staff());
 
 drop policy if exists "Anyone can delete notifications" on public.notifications;
-create policy "Anyone can delete notifications" on public.notifications for delete using (true);
+drop policy if exists "Users and admins can delete notifications" on public.notifications;
+create policy "Users and admins can delete notifications" on public.notifications for delete using (user_id = auth.uid() or public.is_admin());
 
 -- ─── CHAT MESSAGES ───────────────────────────────────────────
 create table if not exists public.chat_messages (
@@ -285,10 +322,41 @@ create index if not exists chat_messages_event_roll_idx on public.chat_messages(
 alter table public.chat_messages enable row level security;
 
 drop policy if exists "Anyone can view chat messages" on public.chat_messages;
-create policy "Anyone can view chat messages" on public.chat_messages for select using (true);
+drop policy if exists "Users and staff can view chat messages" on public.chat_messages;
+create policy "Users and staff can view chat messages" on public.chat_messages for select using (
+  student_roll = (select roll_number from public.profiles where id = auth.uid())
+  or public.is_admin_or_staff()
+);
 
 drop policy if exists "Anyone can send messages" on public.chat_messages;
-create policy "Anyone can send messages" on public.chat_messages for insert with check (true);
+drop policy if exists "Users and staff can send messages" on public.chat_messages;
+create policy "Users and staff can send messages" on public.chat_messages for insert with check (auth.uid() is not null or public.is_admin_or_staff());
+
+-- ─── CERTIFICATE TEMPLATES ───────────────────────────────────
+create table if not exists public.certificate_templates (
+  id              text primary key default gen_random_uuid()::text,
+  event_id        text not null references public.events(id) on delete cascade,
+  title           text not null default 'CERTIFICATE OF PARTICIPATION',
+  subtitle        text not null default 'PROUDLY PRESENTED TO',
+  body_text       text not null default 'for active and successful participation in the campus event',
+  signatory_name1 text not null default 'Dr. A. Sharma',
+  signatory_role1 text not null default 'Principal / Patron',
+  signatory_name2 text not null default 'Event Coordinator',
+  signatory_role2 text not null default 'Convener',
+  theme_color_hex text not null default '#FFD700',
+  badge_style     text not null default 'Gold',
+  canva_url       text default '',
+  updated_at      timestamptz not null default now(),
+  unique (event_id)
+);
+
+alter table public.certificate_templates enable row level security;
+
+drop policy if exists "Anyone can view certificate templates" on public.certificate_templates;
+create policy "Anyone can view certificate templates" on public.certificate_templates for select using (true);
+
+drop policy if exists "Admins and staff can manage certificate templates" on public.certificate_templates;
+create policy "Admins and staff can manage certificate templates" on public.certificate_templates for all using (public.is_admin_or_staff());
 
 -- ─── ENABLE REALTIME ─────────────────────────────────────────
 do $$

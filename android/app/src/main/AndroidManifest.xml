@@ -2,9 +2,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
-        android:label="n_vents"
+        android:label="N Events"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

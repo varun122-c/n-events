@@ -7,25 +7,45 @@ import '../../providers/auth_provider.dart';
 import '../../models/event_model.dart';
 import '../../widgets/universal_image.dart';
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  /// 'all' | 'upcoming' | 'past'
+  String _eventFilter = 'upcoming';
 
   @override
   Widget build(BuildContext context) {
     final stateProvider = Provider.of<AppStateProvider>(context);
     final authProvider = Provider.of<AuthProvider>(context);
 
+    final now = DateTime.now();
+
     // Calculate metrics
     final totalEvents = stateProvider.events.length;
+    final upcomingEvents = stateProvider.events.where((e) => e.dateTime.isAfter(now)).length;
     final totalRegistrations = stateProvider.registrations.length;
+    final paidRegistrations = stateProvider.registrations.where((r) => r.isPaid).length;
     final totalUsersCount = stateProvider.dbProfiles.isNotEmpty
         ? stateProvider.dbProfiles.length
         : (authProvider.registeredUsers.length + (authProvider.isLoggedIn ? 1 : 0));
-    
+
     // Recent registrations feed
     final recentRegs = stateProvider.registrations.reversed.take(4).toList();
 
+    // Apply event filter
+    final filteredEvents = stateProvider.events.where((e) {
+      if (_eventFilter == 'upcoming') return e.dateTime.isAfter(now);
+      if (_eventFilter == 'past') return !e.dateTime.isAfter(now);
+      return true;
+    }).toList();
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
 
     return Scaffold(
       backgroundColor: isDark ? Colors.black : const Color(0xFFF8FAFC),
@@ -134,6 +154,11 @@ class AdminDashboardScreen extends StatelessWidget {
                 context.go('/auth');
               } else if (val == 'switch') {
                 context.go('/auth?tab=signin');
+              } else if (val == 'personal') {
+                authProvider.setPersonalAccountMode(true);
+                context.go('/student');
+              } else if (val == 'scanner') {
+                context.push('/staff/scanner');
               }
             },
             itemBuilder: (context) => [
@@ -156,12 +181,32 @@ class AdminDashboardScreen extends StatelessWidget {
                 ),
               ),
               const PopupMenuItem<String>(
+                value: 'personal',
+                child: Row(
+                  children: [
+                    Icon(Icons.person_rounded, size: 18, color: Color(0xFF2563EB)),
+                    SizedBox(width: 8),
+                    Text('Shift to Personal Account', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'scanner',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code_scanner_rounded, size: 18, color: Color(0xFF10B981)),
+                    SizedBox(width: 8),
+                    Text('QR Ticket Scanner', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
                 value: 'switch',
                 child: Row(
                   children: [
                     Icon(Icons.switch_account, size: 18, color: Colors.cyan),
                     SizedBox(width: 8),
-                    Text('Switch Account', style: TextStyle(fontSize: 13)),
+                    Text('Switch Account / Sign In', style: TextStyle(fontSize: 13)),
                   ],
                 ),
               ),
@@ -191,13 +236,27 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildMetricCard(
                     context,
-                    title: 'Active Events',
+                    title: 'Total Events',
                     value: totalEvents.toString(),
                     icon: Icons.event,
                     color: const Color(0xFF3B82F6),
                   ),
                 ),
                 const SizedBox(width: 12),
+                Expanded(
+                  child: _buildMetricCard(
+                    context,
+                    title: 'Upcoming',
+                    value: upcomingEvents.toString(),
+                    icon: Icons.upcoming_rounded,
+                    color: const Color(0xFF8B5CF6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
                 Expanded(
                   child: _buildMetricCard(
                     context,
@@ -211,14 +270,25 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildMetricCard(
                     context,
-                    title: 'Users & Logins',
+                    title: 'Paid',
+                    value: paidRegistrations.toString(),
+                    icon: Icons.payments_rounded,
+                    color: const Color(0xFFF59E0B),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildMetricCard(
+                    context,
+                    title: 'Users',
                     value: totalUsersCount.toString(),
                     icon: Icons.account_circle_outlined,
-                    color: const Color(0xFF8B5CF6),
+                    color: const Color(0xFF2563EB),
                   ),
                 ),
               ],
             ),
+
             const SizedBox(height: 24),
 
             // Quick Actions Section
@@ -284,10 +354,34 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildQuickActionCard(
                     context,
+                    label: 'Certificates Manager',
+                    icon: Icons.workspace_premium_rounded,
+                    color: const Color(0xFFD97706),
+                    onTap: () => context.push('/admin/certificates'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildQuickActionCard(
+                    context,
                     label: 'Verify Camera QR',
                     icon: Icons.qr_code_scanner_rounded,
                     color: const Color(0xFF10B981),
                     onTap: () => context.push('/staff/scanner'),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildQuickActionCard(
+                    context,
+                    label: 'Sender.net Emails',
+                    icon: Icons.mark_email_read_rounded,
+                    color: const Color(0xFF0284C7),
+                    onTap: () => context.push('/admin/email-settings'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -307,7 +401,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             SizedBox(height: 24),
 
-            // Events List Header
+            // Events List Header + Filter tabs
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -316,30 +410,73 @@ class AdminDashboardScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFF1E293B),
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
                   ),
                 ),
                 Text(
-                  '$totalEvents events',
+                  '${filteredEvents.length} of $totalEvents events',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : const Color(0xFF64748B),
+                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 10),
+            // Filter pills
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  {'label': '🔜 Upcoming', 'val': 'upcoming'},
+                  {'label': '✅ Completed', 'val': 'past'},
+                  {'label': '📋 All Events', 'val': 'all'},
+                ].map((item) {
+                  final isSelected = _eventFilter == item['val'];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => setState(() => _eventFilter = item['val']!),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFF1E3C72)
+                              : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFF1E3C72)
+                                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                          ),
+                        ),
+                        child: Text(
+                          item['label']!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isSelected ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // Events Management list
-            if (stateProvider.events.isEmpty)
+            if (filteredEvents.isEmpty)
               _buildEmptyEventsView(context)
             else
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: stateProvider.events.length,
+                itemCount: filteredEvents.length,
                 itemBuilder: (context, index) {
-                  final event = stateProvider.events[index];
+                  final event = filteredEvents[index];
                   final regCount = stateProvider.registrations.where((r) => r.eventId == event.id).length;
                   return _buildAdminEventCard(context, event, regCount, stateProvider);
                 },
@@ -428,7 +565,7 @@ class AdminDashboardScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 22),

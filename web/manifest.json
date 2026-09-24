@@ -1,6 +1,6 @@
 {
-    "name": "n_vents",
-    "short_name": "n_vents",
+    "name": "N Events",
+    "short_name": "N Events",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

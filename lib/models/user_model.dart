@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 /// Sub-roles that the admin can assign to a registered student/user.
 /// Empty string means no staff sub-role (regular student or admin).
@@ -75,14 +76,20 @@ class UserModel {
             : generate10DigitParticipantCode(id),
         createdAt = createdAt ?? DateTime.now();
 
-  static String generate10DigitParticipantCode(String userId) {
-    if (userId.isEmpty) return '9876543210';
-    int hash = 0;
-    for (int i = 0; i < userId.length; i++) {
-      hash = (hash * 31 + userId.codeUnitAt(i)) & 0xFFFFFFFF;
+  static String generate10DigitParticipantCode([String? userId]) {
+    try {
+      final rand = Random.secure();
+      final codeInt = 1000000000 + rand.nextInt(900000000);
+      return codeInt.toString();
+    } catch (_) {
+      if (userId == null || userId.isEmpty) return '9876543210';
+      int hash = 0;
+      for (int i = 0; i < userId.length; i++) {
+        hash = (hash * 31 + userId.codeUnitAt(i)) & 0xFFFFFFFF;
+      }
+      int tenDigit = 1000000000 + (hash.abs() % 900000000);
+      return tenDigit.toString();
     }
-    int tenDigit = 1000000000 + (hash.abs() % 9000000000);
-    return tenDigit.toString();
   }
 
   String get displayParticipantCode =>
@@ -96,7 +103,7 @@ class UserModel {
       'id': id,
       'name': name,
       'email': email,
-      'password': password,
+      'password': '', // Never serialize plain-text password to local storage
       'role': role,
       'subRole': subRole,
       'rollNumber': rollNumber,

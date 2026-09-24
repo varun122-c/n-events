@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/registration_model.dart';
@@ -108,6 +109,10 @@ class StudentCertificatesScreen extends StatelessWidget {
 
   Widget _buildCertificateCard(BuildContext context, bool isDark, Registration reg, Event event, String studentName) {
     final issueDate = DateFormat('MMMM d, yyyy').format(event.dateTime);
+    final stateProvider = Provider.of<AppStateProvider>(context, listen: false);
+    final template = stateProvider.getCertificateTemplate(event.id);
+    final hasCanvaUrl = template.canvaUrl.trim().isNotEmpty;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 0,
@@ -196,6 +201,26 @@ class StudentCertificatesScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
+                      if (hasCanvaUrl)
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final uri = Uri.tryParse(template.canvaUrl.trim());
+                            if (uri != null && await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(Icons.palette_outlined, size: 14, color: Color(0xFF00C4CC)),
+                          label: const Text(
+                            'Canva Design',
+                            style: TextStyle(color: Color(0xFF00C4CC), fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF00C4CC)),
+                            backgroundColor: const Color(0xFF00C4CC).withValues(alpha: 0.1),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
                       ElevatedButton.icon(
                         onPressed: () => _downloadCertificate(context, isDark, event.title),
                         icon: const Icon(Icons.download_outlined, size: 14),
@@ -268,6 +293,9 @@ class StudentCertificatesScreen extends StatelessWidget {
 
   void _viewCertificateDialog(BuildContext context, bool isDark, Registration reg, Event event, String studentName) {
     final issueDate = DateFormat('MMMM d, yyyy').format(event.dateTime);
+    final stateProvider = Provider.of<AppStateProvider>(context, listen: false);
+    final template = stateProvider.getCertificateTemplate(event.id);
+    final themeColor = template.themeColor;
     
     showDialog(
       context: context,
@@ -278,10 +306,10 @@ class StudentCertificatesScreen extends StatelessWidget {
           decoration: BoxDecoration(
             color: isDark ? Colors.black : const Color(0xFFFAF6F0),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: goldColor, width: 3),
+            border: Border.all(color: themeColor, width: 3),
             boxShadow: [
               BoxShadow(
-                color: goldColor.withValues(alpha: isDark ? 0.3 : 0.2),
+                color: themeColor.withValues(alpha: isDark ? 0.3 : 0.2),
                 blurRadius: 25,
                 spreadRadius: 2,
               )
@@ -292,37 +320,29 @@ class StudentCertificatesScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.workspace_premium_rounded, color: goldColor, size: 68),
+                Icon(Icons.workspace_premium_rounded, color: themeColor, size: 68),
                 const SizedBox(height: 12),
-                const Text(
-                  'CERTIFICATE',
+                Text(
+                  template.title.toUpperCase(),
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 2.0,
-                    color: goldColor,
+                    letterSpacing: 1.5,
+                    color: themeColor,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  'OF PARTICIPATION',
+                  template.subtitle.toUpperCase(),
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.2,
                     color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF8B5A2B),
                   ),
                 ),
                 const SizedBox(height: 20),
-                Text(
-                  'PROUDLY PRESENTED TO',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.0,
-                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF8B7355),
-                  ),
-                ),
-                const SizedBox(height: 8),
                 Text(
                   studentName,
                   style: TextStyle(
@@ -335,11 +355,11 @@ class StudentCertificatesScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Divider(color: goldColor.withValues(alpha: 0.4), thickness: 1.5),
+                  child: Divider(color: themeColor.withValues(alpha: 0.4), thickness: 1.5),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'for active and successful participation in the campus event',
+                  template.bodyText,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
@@ -364,12 +384,17 @@ class StudentCertificatesScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          issueDate,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? goldColor : const Color(0xFF5C4033)),
+                          template.signatoryName1.isNotEmpty ? template.signatoryName1 : 'Dr. A. Sharma',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? themeColor : const Color(0xFF5C4033)),
                         ),
                         Text(
-                          'Date of Issue',
+                          template.signatoryRole1.isNotEmpty ? template.signatoryRole1 : 'Principal',
                           style: TextStyle(fontSize: 9, color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Issued: $issueDate',
+                          style: TextStyle(fontSize: 9, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
                         ),
                       ],
                     ),
@@ -377,11 +402,11 @@ class StudentCertificatesScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          event.coordinatorName.isNotEmpty ? event.coordinatorName : 'Event Coordinator',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? goldColor : const Color(0xFF5C4033)),
+                          template.signatoryName2.isNotEmpty ? template.signatoryName2 : (event.coordinatorName.isNotEmpty ? event.coordinatorName : 'Event Coordinator'),
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? themeColor : const Color(0xFF5C4033)),
                         ),
                         Text(
-                          'Coordinator Sign',
+                          template.signatoryRole2.isNotEmpty ? template.signatoryRole2 : 'Convener',
                           style: TextStyle(fontSize: 9, color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600),
                         ),
                       ],
@@ -429,6 +454,28 @@ class StudentCertificatesScreen extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 20),
+                if (template.canvaUrl.trim().isNotEmpty) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 40,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final uri = Uri.tryParse(template.canvaUrl.trim());
+                        if (uri != null && await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      icon: const Icon(Icons.palette_rounded, size: 16, color: Color(0xFF00C4CC)),
+                      label: const Text('Open Canva Design Template', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF00C4CC))),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF00C4CC), width: 1.5),
+                        backgroundColor: const Color(0xFF00C4CC).withValues(alpha: 0.1),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 SizedBox(
                   width: double.infinity,
                   height: 44,

@@ -1313,6 +1313,72 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
             const Divider(height: 1),
             const SizedBox(height: 6),
 
+            if (authProvider.isStaff) ...[
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.badge_rounded, color: Color(0xFF7C3AED), size: 18),
+                ),
+                title: Text(
+                  'Shift to Staff / Worker Portal',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                subtitle: const Text(
+                  'Access organizer dashboard, attendance & management tools',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF7C3AED)),
+                onTap: () {
+                  authProvider.setPersonalAccountMode(false);
+                  context.go(authProvider.homeRoute);
+                },
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Divider(height: 1),
+              ),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF10B981), size: 18),
+                ),
+                title: Text(
+                  'QR Ticket Scanner',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                subtitle: const Text(
+                  'Scan and verify student entry tickets at campus events',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF10B981)),
+                onTap: () {
+                  context.push('/staff/scanner');
+                },
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Divider(height: 1),
+              ),
+            ],
+
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               leading: Container(
@@ -1324,7 +1390,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
                 child: const Icon(Icons.switch_account_rounded, color: Color(0xFF2563EB), size: 18),
               ),
               title: Text(
-                'Switch Account',
+                'Switch Account / Sign In',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -1332,7 +1398,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
                 ),
               ),
               subtitle: const Text(
-                'Sign in with another student profile',
+                'Sign in with another student or staff profile',
                 style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
               ),
               trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF94A3B8)),

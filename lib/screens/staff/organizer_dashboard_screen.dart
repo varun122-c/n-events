@@ -59,6 +59,11 @@ class OrganizerDashboardScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF10B981)),
+            tooltip: 'QR Ticket Scanner',
+            onPressed: () => context.push('/staff/scanner'),
+          ),
+          IconButton(
             icon: const Icon(Icons.add_rounded, color: Color(0xFF7C3AED)),
             tooltip: 'Create Event',
             onPressed: () => context.go('/admin/event-form'),
@@ -71,9 +76,34 @@ class OrganizerDashboardScreen extends StatelessWidget {
               if (v == 'logout') {
                 authProvider.logout();
                 context.go('/auth');
+              } else if (v == 'personal') {
+                authProvider.setPersonalAccountMode(true);
+                context.go('/student');
+              } else if (v == 'scanner') {
+                context.push('/staff/scanner');
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'personal',
+                child: Row(
+                  children: [
+                    Icon(Icons.person_rounded, size: 18, color: Color(0xFF2563EB)),
+                    SizedBox(width: 8),
+                    Text('Shift to Personal Account'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'scanner',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code_scanner_rounded, size: 18, color: Color(0xFF10B981)),
+                    SizedBox(width: 8),
+                    Text('QR Ticket Scanner'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(value: 'logout', child: Text('Sign Out')),
             ],
           ),

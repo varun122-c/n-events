@@ -17,6 +17,8 @@ import '../screens/admin/admin_participants_screen.dart';
 import '../screens/admin/admin_banner_customizer_screen.dart';
 import '../screens/admin/admin_staff_management_screen.dart';
 import '../screens/admin/admin_user_directory_screen.dart';
+import '../screens/admin/admin_certificate_customizer_screen.dart';
+import '../screens/admin/admin_email_settings_screen.dart';
 import '../screens/staff/organizer_dashboard_screen.dart';
 import '../screens/staff/coordinator_dashboard_screen.dart';
 import '../screens/staff/tech_provider_screen.dart';
@@ -29,17 +31,32 @@ class AppRouter {
     redirect: (BuildContext context, GoRouterState state) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+      final isRoot = state.uri.path == '/';
       final isSplash = state.uri.path == '/splash';
       final isLanding = state.uri.path == '/landing';
       final isAuth = state.uri.path == '/auth' || state.uri.path == '/role-selection';
       final isCallback = state.uri.path == '/login-callback';
       final isOffline = state.uri.path == '/offline';
 
+      // If user has a pending Google OAuth session requiring onboarding, redirect to /auth?tab=signup
+      if (authProvider.pendingGoogleUser != null && !isCallback) {
+        if (!state.uri.toString().contains('tab=signup')) {
+          return '/auth?tab=signup';
+        }
+      }
+
+      // Redirect root route '/' to home route if logged in, or signup if pending Google user, or splash
+      if (isRoot) {
+        if (authProvider.isLoggedIn) return authProvider.homeRoute;
+        if (authProvider.pendingGoogleUser != null) return '/auth?tab=signup';
+        return '/splash';
+      }
+
       // Don't interrupt splash, landing, OAuth callback, or offline screen
       if (isSplash || isLanding || isCallback || isOffline) return null;
 
       // If user is not logged in and trying to access protected routes, redirect to /auth
-      if (!authProvider.isLoggedIn && !isAuth) {
+      if (!authProvider.isLoggedIn && !isAuth && authProvider.pendingGoogleUser == null) {
         return '/auth';
       }
 
@@ -68,7 +85,7 @@ class AppRouter {
         if (state.uri.path.startsWith('/staff/tech') && subRole != 'tech_provider' && role != 'admin') {
           return authProvider.homeRoute;
         }
-        if (state.uri.path.startsWith('/staff/scanner') && subRole != 'scanner' && role != 'admin') {
+        if (state.uri.path.startsWith('/staff/scanner') && !authProvider.isStaff && role != 'admin') {
           return authProvider.homeRoute;
         }
       }
@@ -76,6 +93,10 @@ class AppRouter {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/',
+        redirect: (context, state) => '/splash',
+      ),
       GoRoute(
         path: '/splash',
         pageBuilder: (context, state) => buildAnimatedPage(
@@ -211,6 +232,22 @@ class AppRouter {
           context: context,
           state: state,
           child: const AdminUserDirectoryScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/admin/certificates',
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminCertificateCustomizerScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/admin/email-settings',
+        pageBuilder: (context, state) => buildAnimatedPage(
+          context: context,
+          state: state,
+          child: const AdminEmailSettingsScreen(),
         ),
       ),
       // ─── Staff Routes ─────────────────────────────────────────────────────

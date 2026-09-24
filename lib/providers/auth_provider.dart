@@ -21,21 +21,30 @@ class AuthProvider extends ChangeNotifier {
   static const String _keyCurrentUserJson = 'current_user_json_v2';
 
   UserModel? _currentUser;
+  UserModel? _pendingGoogleUser;
   bool _isLoggedIn = false;
   bool _isInitialized = false;
+  bool _isPersonalAccountMode = false;
   List<UserModel> _registeredUsers = [];
 
   UserModel? get currentUser => _currentUser;
+  UserModel? get pendingGoogleUser => _pendingGoogleUser;
   bool get isLoggedIn => _isLoggedIn;
   bool get isInitialized => _isInitialized;
+  bool get isPersonalAccountMode => _isPersonalAccountMode;
   List<UserModel> get registeredUsers => List.unmodifiable(_registeredUsers);
 
-  String get role {
-    if (_currentUser != null && _isAdminEmail(_currentUser!.email)) {
-      return 'admin';
-    }
-    return _currentUser?.role ?? 'student';
+  void setPersonalAccountMode(bool enabled) {
+    _isPersonalAccountMode = enabled;
+    notifyListeners();
   }
+
+  void togglePersonalAccountMode() {
+    _isPersonalAccountMode = !_isPersonalAccountMode;
+    notifyListeners();
+  }
+
+  String get role => _currentUser?.role ?? 'student';
   String get studentName => _currentUser?.name ?? '';
   String get studentRoll => _currentUser?.rollNumber ?? '';
   String get studentDept => _currentUser?.department ?? 'Computer Science and Engineering (CSE)';
@@ -51,10 +60,11 @@ class AuthProvider extends ChangeNotifier {
   String get subRole => _currentUser?.subRole ?? '';
   String get assignedDepartment => _currentUser?.assignedDepartment ?? '';
   List<String> get assignedEventIds => _currentUser?.assignedEventIds ?? [];
-  bool get isStaff => (_currentUser?.subRole ?? '').isNotEmpty;
+  bool get isStaff => (_currentUser?.subRole ?? '').isNotEmpty || role == 'staff' || role == 'admin';
 
   /// Returns the Go-Router path this user should land on after login
   String get homeRoute {
+    if (_isPersonalAccountMode) return '/student';
     if (role == 'admin') return '/admin';
     switch (subRole) {
       case 'organizer':
@@ -74,6 +84,53 @@ class AuthProvider extends ChangeNotifier {
     _loadFromPrefs();
   }
 
+  void _listenToAuthChanges() {
+    if (SupabaseService.isInitialized && SupabaseService.client != null) {
+      SupabaseService.client!.auth.onAuthStateChange.listen((data) async {
+        final event = data.event;
+        final session = data.session;
+        if ((event == AuthChangeEvent.signedIn || event == AuthChangeEvent.tokenRefreshed) && session != null) {
+          final sbUser = session.user;
+          final email = sbUser.email ?? '';
+          var profile = await SupabaseDbService.fetchProfile(sbUser.id);
+          if (profile == null && email.isNotEmpty) {
+            final matches = _registeredUsers.where((u) => u.email.toLowerCase() == email.toLowerCase());
+            if (matches.isNotEmpty) {
+              profile = matches.first;
+            }
+          }
+
+          if (profile != null && profile.phone.isNotEmpty) {
+            final effectiveRole = _isAdminEmail(email) ? 'admin' : profile.role;
+            final merged = profile.copyWith(id: sbUser.id, email: email, role: effectiveRole);
+            await _saveCurrentSession(merged);
+            _pendingGoogleUser = null;
+          } else {
+            final metadata = sbUser.userMetadata ?? {};
+            _pendingGoogleUser = UserModel(
+              id: sbUser.id,
+              name: metadata['name'] ?? sbUser.email?.split('@').first ?? 'Google User',
+              email: email,
+              password: 'google_oauth_auth',
+              role: _isAdminEmail(email) ? 'admin' : 'student',
+              rollNumber: metadata['roll_number'] ?? '',
+              department: metadata['department'] ?? AitsDepartments.defaultDepartment,
+              college: metadata['college'] ?? TirupatiColleges.defaultCollege,
+              year: metadata['year'] ?? '1st Year',
+              phone: '',
+            );
+          }
+          notifyListeners();
+        } else if (event == AuthChangeEvent.signedOut) {
+          _currentUser = null;
+          _pendingGoogleUser = null;
+          _isLoggedIn = false;
+          notifyListeners();
+        }
+      });
+    }
+  }
+
   Future<void> ensureInitialized() async {
     if (_isInitialized) return;
     int tries = 0;
@@ -88,24 +145,19 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _saveCurrentSession(UserModel user) async {
-    // Always enforce admin role for the admin email, regardless of what's stored
-    final effectiveUser = _isAdminEmail(user.email)
-        ? user.copyWith(role: 'admin')
-        : user;
-    _currentUser = effectiveUser;
+    _currentUser = user;
     _isLoggedIn = true;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_keyIsLoggedIn, true);
-      await prefs.setString(_keyCurrentUserId, effectiveUser.id);
-      await prefs.setString(_keyCurrentUserJson, json.encode(effectiveUser.toMap()));
+      await prefs.setString(_keyCurrentUserId, user.id);
+      await prefs.setString(_keyCurrentUserJson, json.encode(user.toMap()));
     } catch (e) {
       debugPrint('Error saving current session: $e');
     }
 
-    // Ensure profile row in Supabase cloud database is updated with role = 'admin'
-    if (_isAdminEmail(effectiveUser.email) && SupabaseService.isInitialized) {
-      await SupabaseDbService.upsertProfile(effectiveUser);
+    if (SupabaseService.isInitialized) {
+      await SupabaseDbService.upsertProfile(user);
     }
   }
 
@@ -178,6 +230,7 @@ class AuthProvider extends ChangeNotifier {
       _isLoggedIn = false;
     } finally {
       _isInitialized = true;
+      _listenToAuthChanges();
       notifyListeners();
     }
   }
@@ -326,8 +379,7 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     final cleanEmail = email.trim().toLowerCase();
     final cleanRoll = rollNumber.trim().toUpperCase();
-    // Force admin role if this is the admin email
-    final effectiveRole = _isAdminEmail(cleanEmail) ? 'admin' : role;
+    final effectiveRole = role;
 
     // Try Supabase Auth Sign Up if Supabase is active
     if (SupabaseService.isInitialized) {
@@ -424,7 +476,7 @@ class AuthProvider extends ChangeNotifier {
     required String password,
   }) async {
     final cleanInput = emailOrId.trim().toLowerCase();
-    final isAdmin = _isAdminEmail(cleanInput);
+    final isAdmin = _isAdminEmail(cleanInput) || cleanInput == 'admin' || cleanInput == 'admin-01';
 
     // Try Supabase Auth Sign In if user provided an email
     if (SupabaseService.isInitialized && cleanInput.contains('@')) {
@@ -454,11 +506,11 @@ class AuthProvider extends ChangeNotifier {
             final effectiveRole = isAdmin ? 'admin' : (metadata['role'] ?? 'student');
             authenticatedUser = UserModel(
               id: sbUser.id,
-              name: metadata['name'] ?? sbUser.email?.split('@').first ?? 'User',
+              name: metadata['name'] ?? sbUser.email?.split('@').first ?? 'N Events Admin',
               email: sbUser.email ?? cleanInput,
               password: password,
               role: effectiveRole,
-              rollNumber: metadata['roll_number'] ?? '',
+              rollNumber: metadata['roll_number'] ?? (isAdmin ? 'ADMIN-01' : ''),
               department: metadata['department'] ?? AitsDepartments.defaultDepartment,
               college: metadata['college'] ?? TirupatiColleges.defaultCollege,
               year: metadata['year'] ?? '1st Year',
@@ -497,6 +549,7 @@ class AuthProvider extends ChangeNotifier {
     int index = _registeredUsers.indexWhere(
       (u) =>
           u.email.toLowerCase() == cleanInput ||
+          _isAdminEmail(u.email) ||
           (u.rollNumber.isNotEmpty && u.rollNumber.toLowerCase() == cleanInput),
     );
 
@@ -521,7 +574,17 @@ class AuthProvider extends ChangeNotifier {
       return 'User not found! Please check your Email/Roll No or Sign Up first.';
     }
 
-    if (!isAdmin && userMatch.password != password) {
+    // Admin password check: if logging in as master admin, update local password if changed
+    if (isAdmin) {
+      userMatch = userMatch.copyWith(role: 'admin', password: password, email: _adminEmail);
+      final uIdx = _registeredUsers.indexWhere((u) => u.id == userMatch.id || _isAdminEmail(u.email));
+      if (uIdx != -1) {
+        _registeredUsers[uIdx] = userMatch;
+      } else {
+        _registeredUsers.add(userMatch);
+      }
+      await _saveUsersToPrefs();
+    } else if (userMatch.password.isNotEmpty && userMatch.password != password) {
       return 'Incorrect password! Please try again.';
     }
 
@@ -537,35 +600,109 @@ class AuthProvider extends ChangeNotifier {
   Future<String?> signInWithGoogle({String role = 'student'}) async {
     try {
       if (SupabaseService.isInitialized) {
-        await SupabaseService.signInWithGoogle();
+        final initiated = await SupabaseService.signInWithGoogle();
+        if (!initiated) {
+          _pendingGoogleUser = null;
+          return 'CANCELLED';
+        }
         final sbUser = SupabaseService.currentUser;
         if (sbUser != null) {
-          await _loadProfileFromSupabase(sbUser);
+          final email = sbUser.email ?? '';
+          var profile = await SupabaseDbService.fetchProfile(sbUser.id);
+
+          // Fallback check in local registered users cache if Supabase profile isn't fetched yet
+          if (profile == null && email.isNotEmpty) {
+            final matches = _registeredUsers.where((u) => u.email.toLowerCase() == email.toLowerCase());
+            if (matches.isNotEmpty) {
+              profile = matches.first;
+            }
+          }
+
+          if (profile != null && profile.phone.isNotEmpty) {
+            final effectiveRole = _isAdminEmail(email) ? 'admin' : profile.role;
+            final merged = profile.copyWith(id: sbUser.id, email: email, role: effectiveRole);
+            await _saveCurrentSession(merged);
+            _pendingGoogleUser = null;
+            notifyListeners();
+            return null; // Existing fully verified user -> proceed to home
+          }
+
+          // New Google user -> set pending session requiring Sign Up onboarding
+          final metadata = sbUser.userMetadata ?? {};
+          _pendingGoogleUser = UserModel(
+            id: sbUser.id,
+            name: metadata['name'] ?? sbUser.email?.split('@').first ?? 'Google User',
+            email: email,
+            password: 'google_oauth_auth',
+            role: _isAdminEmail(email) ? 'admin' : role,
+            rollNumber: metadata['roll_number'] ?? '',
+            department: metadata['department'] ?? AitsDepartments.defaultDepartment,
+            college: metadata['college'] ?? TirupatiColleges.defaultCollege,
+            year: metadata['year'] ?? '1st Year',
+            phone: profile?.phone ?? '',
+          );
           notifyListeners();
-          return null;
+          return 'NEED_ONBOARDING';
+        } else {
+          // User cancelled account selection popup or backed out
+          _pendingGoogleUser = null;
+          return 'CANCELLED';
         }
       }
     } catch (e) {
       debugPrint('Google OAuth Warning: $e');
     }
 
-    // Google Sign-In Fallback / Demo Account creation
-    final googleDemoUser = UserModel(
-      id: 'usr_google_${DateTime.now().millisecondsSinceEpoch}',
-      name: 'Google Auth User',
-      email: 'user.google@gmail.com',
-      password: 'google123',
-      role: role,
-      rollNumber: 'GGL-2026-01',
-      department: AitsDepartments.defaultDepartment,
-      year: '2nd Year',
-      phone: '',
-      avatarIndex: 0,
+    _pendingGoogleUser = null;
+    return 'CANCELLED';
+  }
+
+  Future<String?> completeGoogleOnboarding({
+    required String name,
+    required String rollNumber,
+    required String department,
+    required String college,
+    required String year,
+    required String phone,
+    required String dob,
+    required String gender,
+    required int avatarIndex,
+  }) async {
+    final pending = _pendingGoogleUser;
+    if (pending == null) return 'No pending Google onboarding session found.';
+
+    final cleanRoll = rollNumber.trim().toUpperCase();
+    final effectiveRole = _isAdminEmail(pending.email) ? 'admin' : pending.role;
+
+    final updatedUser = pending.copyWith(
+      name: name.trim(),
+      role: effectiveRole,
+      rollNumber: cleanRoll,
+      department: department,
+      college: college,
+      year: year,
+      phone: phone.trim(),
+      dob: dob,
+      gender: gender,
+      avatarIndex: avatarIndex,
     );
 
-    await _saveCurrentSession(googleDemoUser);
+    // Save profile to Supabase DB if initialized
+    if (SupabaseService.isInitialized) {
+      await SupabaseDbService.upsertProfile(updatedUser);
+    }
+
+    final idx = _registeredUsers.indexWhere((u) => u.id == updatedUser.id || u.email.toLowerCase() == updatedUser.email.toLowerCase());
+    if (idx != -1) {
+      _registeredUsers[idx] = updatedUser;
+    } else {
+      _registeredUsers.add(updatedUser);
+    }
+    await _saveUsersToPrefs();
+    await _saveCurrentSession(updatedUser);
+    _pendingGoogleUser = null;
     notifyListeners();
-    return null;
+    return null; // Success
   }
 
   // ─── HANDLE GOOGLE AUTH SUCCESS ──────────────────────────────────────────
@@ -580,9 +717,10 @@ class AuthProvider extends ChangeNotifier {
     // Try to load from Supabase profiles first
     if (SupabaseService.isInitialized) {
       final profile = await SupabaseDbService.fetchProfile(id);
-      if (profile != null) {
-        final merged = profile.copyWith(email: cleanEmail, password: '');
+      if (profile != null && profile.phone.isNotEmpty) {
+        final merged = profile.copyWith(id: id, email: cleanEmail, password: '');
         await _saveCurrentSession(merged);
+        _pendingGoogleUser = null;
         notifyListeners();
         return;
       }
@@ -591,27 +729,24 @@ class AuthProvider extends ChangeNotifier {
     final index = _registeredUsers.indexWhere(
         (u) => u.id == id || u.email.toLowerCase() == cleanEmail);
 
-    UserModel user;
-    if (index != -1) {
-      user = _registeredUsers[index];
+    if (index != -1 && _registeredUsers[index].phone.isNotEmpty) {
+      final existing = _registeredUsers[index].copyWith(id: id);
+      await _saveCurrentSession(existing);
+      _pendingGoogleUser = null;
     } else {
-      user = UserModel(
+      _pendingGoogleUser = UserModel(
         id: id,
         name: name,
         email: cleanEmail,
-        password: 'oauth_google_protected',
-        role: 'student',
+        password: 'google_oauth_auth',
+        role: _isAdminEmail(cleanEmail) ? 'admin' : 'student',
         rollNumber: '',
         department: AitsDepartments.defaultDepartment,
         college: TirupatiColleges.defaultCollege,
         year: '1st Year',
       );
-      _registeredUsers.add(user);
-      await _saveUsersToPrefs();
-      // Also write to Supabase
-      await SupabaseDbService.upsertProfile(user);
+      _isLoggedIn = false;
     }
-    await _saveCurrentSession(user);
     notifyListeners();
   }
 
